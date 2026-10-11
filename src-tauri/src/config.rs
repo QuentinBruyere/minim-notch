@@ -53,6 +53,8 @@ pub struct Config {
     pub notch_opacity: u8,
     /// Grain over the notch's background, 0 (none) to `MAX_GRAIN` (DF-0019).
     pub notch_grain: u8,
+    /// Checks for updates at startup, then once a day (ADR-0013).
+    pub check_updates: bool,
 }
 
 /// The strongest grain, in %: past it, it hides the notch's color and texts.
@@ -144,6 +146,7 @@ impl Default for Config {
             notch_color: None,
             notch_opacity: 100,
             notch_grain: 0,
+            check_updates: true,
         }
     }
 }

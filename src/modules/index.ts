@@ -3,12 +3,14 @@ import SquareTerminal from '@lucide/svelte/icons/square-terminal'
 import Clock from '@lucide/svelte/icons/clock'
 import PawPrint from '@lucide/svelte/icons/paw-print'
 import Hourglass from '@lucide/svelte/icons/hourglass'
+import Music from '@lucide/svelte/icons/music'
 import TimerIcon from '@lucide/svelte/icons/timer'
 import Volume2 from '@lucide/svelte/icons/volume-2'
 import type { Component } from 'svelte'
 import ClaudeCodeSettings from './claude-code/ClaudeCodeSettings.svelte'
 import ClockSettings from './clock/ClockSettings.svelte'
 import CompanionSettings from './companion/CompanionSettings.svelte'
+import MediaSettings from './media/MediaSettings.svelte'
 import TimerSettings from './timer/TimerSettings.svelte'
 
 // What a module's settings component receives (ADR-0009).
@@ -33,6 +35,7 @@ export const coreModuleUis: ModuleUis = {
   'claude-code': { icon: SquareTerminal, settings: ClaudeCodeSettings },
   clock: { icon: Clock, settings: ClockSettings },
   companion: { icon: PawPrint, settings: CompanionSettings },
+  media: { icon: Music, settings: MediaSettings },
   stopwatch: { icon: TimerIcon },
   timer: { icon: Hourglass, settings: TimerSettings },
   volume: { icon: Volume2 },

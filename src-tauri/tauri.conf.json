@@ -57,5 +57,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE5Q0U4NDAyRTJDRjEwQjUKUldTMUVNL2lBb1RPcWROT3NiM0lXcnF4QjZvUDhzSm9hZEFHcWF3T1BjRHFtbjNHN2tQSVNwQ0EK",
+      "endpoints": [
+        "https://github.com/QuentinBruyere/minim-notch/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

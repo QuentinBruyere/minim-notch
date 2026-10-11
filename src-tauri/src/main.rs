@@ -4,6 +4,7 @@
 use minim_notch_lib::modules::claude_code::ClaudeCode;
 use minim_notch_lib::modules::clock::Clock;
 use minim_notch_lib::modules::companion::DeskCompanion;
+use minim_notch_lib::modules::media::Media;
 use minim_notch_lib::modules::stopwatch::Stopwatch;
 use minim_notch_lib::modules::timer::Timer;
 use minim_notch_lib::modules::volume::Volume;
@@ -19,6 +20,7 @@ fn main() {
             Box::new(Timer::default()),
             Box::new(Volume::default()),
             Box::new(DeskCompanion::default()),
+            Box::new(Media::default()),
         ],
     );
 }

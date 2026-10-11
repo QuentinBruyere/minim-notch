@@ -1,0 +1,64 @@
+name: Release
+
+# Pushing a version tag (e.g. v0.2.0, equal to the version in
+# src-tauri/tauri.conf.json) builds the signed Windows installers and
+# publishes them in a GitHub release, with the latest.json manifest read by
+# the updater of installed copies.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Windows installers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the tag matches the app version
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            Write-Error "Tag ${{ github.ref_name }} does not match version $version in tauri.conf.json"
+            exit 1
+          }
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install front-end dependencies
+        run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing key (ADR-0013), never stored in the repository.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Minim Notch ${{ github.ref_name }}
+          releaseBody: See the assets below to download the Windows installer.
+          releaseDraft: false
+          # A pre-release would not be "latest": installed copies read
+          # releases/latest/download/latest.json.
+          prerelease: false
+          # The updater installs the NSIS installer (passive mode).
+          updaterJsonPreferNsis: true
+          # Signed update files, only when publishing: a plain
+          # `pnpm tauri build` works without the key.
+          args: --config src-tauri/tauri.release.conf.json

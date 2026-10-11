@@ -3,6 +3,7 @@
 pub mod claude_code;
 pub mod clock;
 pub mod companion;
+pub mod media;
 pub mod stopwatch;
 pub mod timer;
 pub mod volume;

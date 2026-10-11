@@ -55,7 +55,17 @@
     logFile: string
     // The previous run's crash (ADR-0014), until dismissed.
     crash: { at: string; version: string; thread: string; location: string; message: string } | null
+    // Updates (ADR-0013); never checked by the development version.
+    checkUpdates: boolean
+    updatesEnabled: boolean
+    update: UpdateStatus
   }
+
+  // Mirrors `updates::Status` in src-tauri/src/updates.rs
+  type UpdateStatus =
+    | { state: 'idle' | 'checking' | 'upToDate' }
+    | { state: 'available'; version: string; notes: string | null }
+    | { state: 'downloading'; version: string; percent: number | null }
 
   // Mirrors `ModuleInfo` in src-tauri/src/settings.rs
   interface ModuleInfo {
@@ -365,7 +375,29 @@
     })
   }
 
+  // What the settings say about updates.
+  function updateText(update: UpdateStatus): string {
+    switch (update.state) {
+      case 'checking':
+        return t('settings.updates.checking')
+      case 'upToDate':
+        return t('settings.updates.up_to_date')
+      case 'available':
+        return t('settings.updates.available', { version: update.version })
+      case 'downloading':
+        return update.percent === null
+          ? t('settings.updates.downloading')
+          : t('settings.updates.downloading_percent', { percent: update.percent })
+      default:
+        return t('settings.updates.idle')
+    }
+  }
+
   $effect(() => {
+    // Follows the download without rebuilding the whole settings.
+    const unlistenUpdate = listen<UpdateStatus>('update-changed', (e) => {
+      if (settings) settings.update = e.payload
+    })
     const unlisten = listen<Settings>('settings-changed', (e) => load(e.payload))
     const refresh = () => {
       // A companion pack may have been dropped in its folder (DF-0025).
@@ -379,6 +411,7 @@
     return () => {
       window.removeEventListener('focus', refresh)
       void unlisten.then((off) => off())
+      void unlistenUpdate.then((off) => off())
     }
   })
 </script>
@@ -424,6 +457,29 @@
           </button>
           <button onclick={() => run('open_log')}>{t('settings.log.open')}</button>
           <button onclick={() => run('dismiss_crash')}>{t('settings.crash.dismiss')}</button>
+        </div>
+      </section>
+    {/if}
+
+    {#if settings && (settings.update.state === 'available' || settings.update.state === 'downloading')}
+      <section class="update" role="status">
+        <div class="label">
+          {t('settings.updates.available', { version: settings.update.version })}
+        </div>
+        {#if settings.update.state === 'available' && settings.update.notes}
+          <div class="hint notes">{settings.update.notes}</div>
+        {/if}
+        <div class="hint">{t('settings.updates.install.hint')}</div>
+        <div class="actions">
+          <button
+            class="primary"
+            disabled={settings.update.state === 'downloading'}
+            onclick={() => run('install_update')}
+          >
+            {settings.update.state === 'downloading'
+              ? updateText(settings.update)
+              : t('settings.updates.install')}
+          </button>
         </div>
       </section>
     {/if}
@@ -968,6 +1024,40 @@
             <div class="label">{t('settings.version')}</div>
             <div>{version}</div>
           </div>
+          <div class="stack separated">
+            <div>
+              <div class="label">{t('settings.updates')}</div>
+              <div class="hint">
+                {settings.updatesEnabled
+                  ? updateText(settings.update)
+                  : t('settings.updates.dev')}
+              </div>
+            </div>
+            <div class="actions">
+              <button
+                disabled={!settings.updatesEnabled ||
+                  settings.update.state === 'checking' ||
+                  settings.update.state === 'downloading'}
+                onclick={() => run('check_updates')}
+              >
+                {t('settings.updates.check')}
+              </button>
+            </div>
+          </div>
+          <label class="row">
+            <div>
+              <div class="label">{t('settings.updates.auto')}</div>
+              <div class="hint">{t('settings.updates.auto.hint')}</div>
+            </div>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={settings.checkUpdates}
+              onchange={(e) => run('set_check_updates', { enabled: e.currentTarget.checked })}
+            />
+          </label>
+        </section>
+        <section>
           <div class="row">
             <div>
               <div class="label">{t('settings.config_dir')}</div>
@@ -984,6 +1074,22 @@
               <button onclick={() => run('reveal_log')}>{t('settings.log.reveal')}</button>
               <button onclick={copyReport}>
                 {copied ? t('settings.log.copied') : t('settings.log.copy_report')}
+              </button>
+            </div>
+          </div>
+        </section>
+        <section>
+          <div class="stack">
+            <div>
+              <div class="label">{t('settings.help')}</div>
+              <div class="hint">{t('settings.help.hint')}</div>
+            </div>
+            <div class="actions">
+              <button onclick={() => run('open_link', { link: 'website' })}>
+                {t('settings.help.website')}
+              </button>
+              <button onclick={() => run('open_link', { link: 'issues' })}>
+                {t('settings.help.issues')}
               </button>
             </div>
           </div>

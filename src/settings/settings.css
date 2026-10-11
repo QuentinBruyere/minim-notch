@@ -384,6 +384,18 @@ html[data-window='settings'] {
     border-left: 3px solid var(--danger);
   }
 
+  /* An update found (ADR-0013), above every page. */
+  & section.update {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-left: 3px solid var(--accent);
+  }
+
+  & section.update .notes {
+    white-space: pre-line;
+  }
+
   & main > .error {
     margin: 0;
   }

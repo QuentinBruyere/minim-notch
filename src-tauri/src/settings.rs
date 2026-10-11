@@ -83,6 +83,11 @@ pub struct Settings {
     log_file: String,
     /// The previous run's crash, until the user dismisses it.
     crash: Option<crate::diagnostics::Crash>,
+    /// Automatic update checks (ADR-0013).
+    check_updates: bool,
+    /// False in the development version, which never checks.
+    updates_enabled: bool,
+    update: crate::updates::Status,
 }
 
 pub fn current(app: &AppHandle) -> Settings {
@@ -136,6 +141,9 @@ pub fn current(app: &AppHandle) -> Settings {
             .display()
             .to_string(),
         crash: state.crash.lock().unwrap().clone(),
+        check_updates: config.check_updates,
+        updates_enabled: crate::updates::enabled(),
+        update: crate::updates::status(app),
     }
 }
 
@@ -320,6 +328,13 @@ pub fn recenter(app: AppHandle) -> Result<(), String> {
     }
     changed(&app);
     Ok(())
+}
+
+/// Automatic update checks; "Check now" works either way (ADR-0013).
+#[tauri::command]
+pub fn set_check_updates(app: AppHandle, enabled: bool) {
+    update_config(&app, |c| c.check_updates = enabled);
+    changed(&app);
 }
 
 /// Applied by the watcher within a second (DF-0002).
@@ -526,4 +541,26 @@ pub fn module_call(
         return Err(crate::t!("settings.module_disabled", name = module.name()));
     }
     module.call(&action, args.unwrap_or(Value::Null))
+}
+
+/// Web pages the settings may open, by name: the front never passes a URL.
+const LINKS: [(&str, &str); 2] = [
+    ("website", "https://minim-notch.com"),
+    (
+        "issues",
+        "https://github.com/QuentinBruyere/minim-notch/issues",
+    ),
+];
+
+/// Opens one of `LINKS` in the default browser.
+#[tauri::command]
+pub fn open_link(link: String) -> Result<(), String> {
+    let (_, url) = LINKS
+        .iter()
+        .find(|(name, _)| *name == link)
+        .ok_or_else(|| crate::t!("settings.help.open_failed"))?;
+    tauri_plugin_opener::open_url(*url, None::<&str>).map_err(|e| {
+        log::warn!("cannot open {url}: {e}");
+        crate::t!("settings.help.open_failed")
+    })
 }

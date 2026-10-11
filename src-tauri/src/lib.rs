@@ -11,6 +11,7 @@ mod platform;
 mod resistance;
 mod settings;
 mod tray;
+mod updates;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -214,6 +215,8 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
         .plugin(tauri_plugin_dialog::init())
         // In installed builds too (ADR-0014).
         .plugin(diagnostics::log_plugin())
+        // Updates, installed on the user's click only (ADR-0013).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_content,
             get_status,
@@ -250,6 +253,10 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
             set_tucked,
             settings::set_module_pin,
             settings::module_call,
+            settings::open_link,
+            settings::set_check_updates,
+            updates::check_updates,
+            updates::install_update,
             context_menu::module_menu,
             diagnostics::open_log,
             diagnostics::reveal_log,
@@ -302,6 +309,7 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
                 log_dir,
                 crash: Mutex::new(crash.clone()),
             });
+            app.manage(updates::Updates::default());
             let state = app.state::<AppState>();
             for (module, enabled) in state.modules.iter().zip(enabled) {
                 if enabled {
@@ -316,6 +324,7 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
             notch::apply_hit_area(&window)?;
             notch::show(&window)?;
             notch::spawn_watcher(app.handle().clone());
+            updates::spawn_watcher(app.handle().clone());
 
             tray::create(app.handle())?;
             // The right-click menu of the modules (the tray has its own).

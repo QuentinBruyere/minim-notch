@@ -49,6 +49,7 @@ Follow what comes next on the [roadmap](https://minim-notch.com/roadmap/).
 - **Companions**: little pixel-art creatures that act out what is happening. You can draw and import your own.
 - **Your style**: light or dark theme, custom color and opacity.
 - **Five languages**: English, French, German, Spanish and Japanese.
+- **Updates**: Minim Notch tells you when a new version is out and installs it when you click, never on its own.
 
 ## Modules
 
@@ -59,6 +60,7 @@ Follow what comes next on the [roadmap](https://minim-notch.com/roadmap/).
 | **Stopwatch** | Start, pause and reset, right from the notch. |
 | **Timer** | A countdown that rings when it is over. |
 | **Volume** (Windows) | A slider and a mute button, shown for a moment when the volume changes. |
+| **Media** (Windows) | What is playing on the computer (music, video, podcast), from any app, with its cover, a progress bar and play / pause / next buttons. |
 | **Companion** | A companion that reacts to everything happening in the notch: music, a timer ringing, the time of day. |
 
 ### Official version
@@ -102,7 +104,7 @@ cargo test
 
 ## Privacy
 
-Minim Notch only connects to the internet to check for updates, a setting you can turn off. The log and crash reports stay on your computer; if you want, you can attach them yourself to an issue.
+Minim Notch only connects to the internet to check for updates (at startup, then once a day), a setting you can turn off. That check is a plain request for the latest version number: no identifier, no statistics. The log and crash reports stay on your computer; if you want, you can attach them yourself to an issue.
 
 ## Contributing
 

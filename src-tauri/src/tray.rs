@@ -10,16 +10,21 @@ const TRAY_ID: &str = "main";
 
 /// Tray menu: quick actions only, everything else lives in the settings window.
 fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let item = |id: &str, key: &str| MenuItem::with_id(app, id, t!(key), true, None::<&str>);
-    Menu::with_items(
+    let item = |id: &str, text: String| MenuItem::with_id(app, id, text, true, None::<&str>);
+    let menu = Menu::with_items(
         app,
         &[
-            &item("settings", "tray.settings")?,
-            &item("toggle", "tray.toggle")?,
+            &item("settings", t!("tray.settings"))?,
+            &item("toggle", t!("tray.toggle"))?,
             &PredefinedMenuItem::separator(app)?,
-            &item("quit", "tray.quit")?,
+            &item("quit", t!("tray.quit"))?,
         ],
-    )
+    )?;
+    // An update found (ADR-0013): shown in the settings.
+    if let Some(version) = crate::updates::available_version(app) {
+        menu.prepend(&item("update", t!("tray.update", version = version))?)?;
+    }
+    Ok(menu)
 }
 
 /// Rebuilds the menu in the current language (ADR-0012).
@@ -53,7 +58,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "settings" => {
+            "settings" | "update" => {
                 if let Err(e) = crate::settings::open(app) {
                     log::error!("cannot open settings: {e}");
                 }
