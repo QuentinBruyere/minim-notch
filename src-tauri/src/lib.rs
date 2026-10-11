@@ -320,6 +320,7 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
             let window = app
                 .get_webview_window(NOTCH_LABEL)
                 .expect("notch window is declared in tauri.conf.json");
+            platform::hide_frame(&window)?;
             notch::place(&window)?;
             notch::apply_hit_area(&window)?;
             notch::show(&window)?;

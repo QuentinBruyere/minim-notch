@@ -17,8 +17,8 @@ pub struct Shape {
 mod windows;
 #[cfg(windows)]
 pub use windows::{
-    bring_to_front, foreground_class, fullscreen_on_notch_screen, os_version, prepare_overlay,
-    repaint_host, restrict_to_shapes, set_cursor_resistance, set_resistance_rect,
+    bring_to_front, foreground_class, fullscreen_on_notch_screen, hide_frame, os_version,
+    prepare_overlay, restrict_to_shapes, set_cursor_resistance, set_resistance_rect,
     set_resistance_strength, take_breakthrough,
 };
 
@@ -27,9 +27,8 @@ pub fn prepare_overlay(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Not implemented yet outside Windows: the notch never auto-hides there.
 #[cfg(not(windows))]
-pub fn repaint_host(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
+pub fn hide_frame(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 

@@ -6,7 +6,6 @@ use std::sync::atomic::Ordering;
 
 use serde::Serialize;
 use serde_json::Value;
-use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Emitter, Manager, Theme, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt;
 
@@ -159,14 +158,6 @@ fn screen_choices(app: &AppHandle) -> Vec<ScreenChoice> {
         .collect()
 }
 
-fn repaint_notch_host(app: &AppHandle) {
-    if let Some(notch) = app.get_webview_window(crate::NOTCH_LABEL)
-        && let Err(e) = platform::repaint_host(&notch)
-    {
-        log::warn!("cannot repaint the notch window: {e}");
-    }
-}
-
 /// Opens the settings window, or brings it back to the front.
 pub fn open(app: &AppHandle) -> tauri::Result<()> {
     open_window(app, true)
@@ -196,15 +187,7 @@ fn open_window(app: &AppHandle, focus: bool) -> tauri::Result<()> {
             .center()
             .theme(window_theme(app))
             .focused(focus)
-            .on_page_load(|window, payload| {
-                if payload.event() == PageLoadEvent::Finished {
-                    repaint_notch_host(window.app_handle());
-                }
-            })
             .build()?;
-    // Creating the window leaves white pixels behind the notch's webview
-    // (see `platform::repaint_host`): wipe them, again once the page is in.
-    repaint_notch_host(app);
     // Move mode only lasts while the settings are open.
     let handle = app.clone();
     window.on_window_event(move |event| {

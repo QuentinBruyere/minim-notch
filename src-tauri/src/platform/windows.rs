@@ -3,16 +3,17 @@ use std::mem::{size_of, zeroed};
 use tauri::WebviewWindow;
 
 use crate::placement::Edge;
-use windows_sys::Win32::Foundation::RECT;
+use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     CombineRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject, GetMonitorInfoW, HRGN,
     MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO, MonitorFromPoint,
-    MonitorFromWindow, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE, RDW_NOCHILDREN, RDW_UPDATENOW, RGN_OR,
-    RedrawWindow, SetWindowRgn,
+    MonitorFromWindow, RGN_OR, SetWindowRgn,
 };
+use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
-    SetWindowLongPtrW, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    SetWindowLongPtrW, WM_NCACTIVATE, WM_NCPAINT, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW,
 };
 
 /// Turns the notch into a tool window that never takes focus:
@@ -34,20 +35,39 @@ pub fn prepare_overlay(window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Repaints the window itself, not its webview. Creating another window
-/// leaves white pixels in the notch window, behind its transparent webview,
-/// which show in the transparent margin around the shape until it repaints.
-pub fn repaint_host(window: &WebviewWindow) -> tauri::Result<()> {
+/// Stops Windows from drawing a window frame around the notch. The window has
+/// no visible frame, but Windows still paints a default (white) one on each
+/// activation change (`WM_NCACTIVATE`, `WM_NCPAINT`): a click on the notch,
+/// then elsewhere, or another of our windows opening. The webview is
+/// transparent, so that white showed in the margin left around the shapes
+/// (`AA_MARGIN`). Called once: the subclass lives as long as the window.
+pub fn hide_frame(window: &WebviewWindow) -> tauri::Result<()> {
     let hwnd = window.hwnd()?.0;
     unsafe {
-        RedrawWindow(
-            hwnd,
-            std::ptr::null(),
-            std::ptr::null_mut(),
-            RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_NOCHILDREN | RDW_UPDATENOW,
-        );
+        SetWindowSubclass(hwnd, Some(frameless_proc), FRAMELESS_SUBCLASS, 0);
     }
     Ok(())
+}
+
+const FRAMELESS_SUBCLASS: usize = 0x6d6e;
+
+unsafe extern "system" fn frameless_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    unsafe {
+        match msg {
+            WM_NCPAINT => 0,
+            // lParam -1: update the activation state without repainting the
+            // frame (documented for WM_NCACTIVATE).
+            WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
+            _ => DefSubclassProc(hwnd, msg, wparam, lparam),
+        }
+    }
 }
 
 /// True when the foreground window covers the whole monitor the notch is on,
