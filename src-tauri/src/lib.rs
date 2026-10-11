@@ -321,6 +321,7 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
                 .get_webview_window(NOTCH_LABEL)
                 .expect("notch window is declared in tauri.conf.json");
             platform::hide_frame(&window)?;
+            platform::track_foreground(&window)?;
             notch::place(&window)?;
             notch::apply_hit_area(&window)?;
             notch::show(&window)?;
@@ -340,6 +341,11 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
         .on_window_event(|window, event| {
             if window.label() != NOTCH_LABEL {
                 return;
+            }
+            // The notch never keeps the focus: see `platform::track_foreground`.
+            if let WindowEvent::Focused(true) = event {
+                log::info!("notch took the focus, given back");
+                platform::give_back_foreground();
             }
             // On a DPI change the window still has its old size when this event fires,
             // and Windows then applies its own suggested rect. Re-center afterwards,

@@ -17,15 +17,23 @@ pub struct Shape {
 mod windows;
 #[cfg(windows)]
 pub use windows::{
-    bring_to_front, foreground_class, fullscreen_on_notch_screen, hide_frame, os_version,
-    prepare_overlay, restrict_to_shapes, set_cursor_resistance, set_resistance_rect,
-    set_resistance_strength, take_breakthrough,
+    bring_to_front, foreground_class, fullscreen_on_notch_screen, give_back_foreground, hide_frame,
+    os_version, prepare_overlay, restrict_to_shapes, set_cursor_resistance, set_resistance_rect,
+    set_resistance_strength, take_breakthrough, track_foreground,
 };
 
 #[cfg(not(windows))]
 pub fn prepare_overlay(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
+
+#[cfg(not(windows))]
+pub fn track_foreground(_notch: &tauri::WebviewWindow) -> tauri::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn give_back_foreground() {}
 
 #[cfg(not(windows))]
 pub fn hide_frame(_window: &tauri::WebviewWindow) -> tauri::Result<()> {

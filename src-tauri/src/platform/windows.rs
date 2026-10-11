@@ -9,11 +9,13 @@ use windows_sys::Win32::Graphics::Gdi::{
     MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO, MonitorFromPoint,
     MonitorFromWindow, RGN_OR, SetWindowRgn,
 };
+use windows_sys::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
-    SetWindowLongPtrW, WM_NCACTIVATE, WM_NCPAINT, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW,
+    EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetForegroundWindow,
+    GetWindowLongPtrW, GetWindowRect, IsWindow, SetForegroundWindow, SetWindowLongPtrW,
+    WINEVENT_OUTOFCONTEXT, WM_NCACTIVATE, WM_NCPAINT, WS_CAPTION, WS_EX_APPWINDOW,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 /// Turns the notch into a tool window that never takes focus:
@@ -67,6 +69,59 @@ unsafe extern "system" fn frameless_proc(
             WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
             _ => DefSubclassProc(hwnd, msg, wparam, lparam),
         }
+    }
+}
+
+/// The notch must never keep the focus. `WS_EX_NOACTIVATE` refuses it to a
+/// click, but the webview, run by another process that shares our input
+/// queue, takes the focus itself when our app was active just before (the
+/// settings, or a click on the notch right after them). So the window that
+/// was in front is followed (`EVENT_SYSTEM_FOREGROUND`, only sent when it
+/// changes), and `give_back_foreground` puts it back.
+/// Called once, from the UI thread (the hook needs its message loop).
+pub fn track_foreground(notch: &WebviewWindow) -> tauri::Result<()> {
+    NOTCH_HWND.store(notch.hwnd()?.0 as isize, Ordering::Relaxed);
+    PREVIOUS_FOREGROUND.store(unsafe { GetForegroundWindow() } as isize, Ordering::Relaxed);
+    unsafe {
+        SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            std::ptr::null_mut(),
+            Some(on_foreground),
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT,
+        );
+    }
+    Ok(())
+}
+
+/// Gives the focus back to the window that had it before the notch.
+pub fn give_back_foreground() {
+    let previous = PREVIOUS_FOREGROUND.load(Ordering::Relaxed) as HWND;
+    unsafe {
+        if !previous.is_null() && IsWindow(previous) != 0 {
+            SetForegroundWindow(previous);
+        }
+    }
+}
+
+static NOTCH_HWND: AtomicIsize = AtomicIsize::new(0);
+/// Last window in front other than the notch.
+static PREVIOUS_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
+
+unsafe extern "system" fn on_foreground(
+    _hook: HWINEVENTHOOK,
+    _event: u32,
+    hwnd: HWND,
+    _object: i32,
+    _child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    let hwnd = hwnd as isize;
+    if hwnd != 0 && hwnd != NOTCH_HWND.load(Ordering::Relaxed) {
+        PREVIOUS_FOREGROUND.store(hwnd, Ordering::Relaxed);
     }
 }
 
@@ -243,7 +298,7 @@ fn card_region(edge: Edge, shape: &super::Shape) -> HRGN {
 // --- Cursor resistance (DF-0004): a low-level mouse hook on its own thread ---
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, POINT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -422,9 +477,7 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
 // --- Bringing a window to the front ---
 
 use windows_sys::Win32::System::Threading::AttachThreadInput;
-use windows_sys::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetWindowThreadProcessId, SetForegroundWindow,
-};
+use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, GetWindowThreadProcessId};
 
 /// Windows refuses `SetForegroundWindow` to an app that did not receive the
 /// last input (e.g. opened from a second launch or after the tray menu closed):
