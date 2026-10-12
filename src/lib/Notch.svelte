@@ -445,7 +445,7 @@
 
   /* A slider across most of the closed notch: the bar takes the room left. */
   .row.slider:not(.bubble) {
-    width: 85%;
+    width: 95%;
     margin: 0 auto;
     gap: 10px;
   }
