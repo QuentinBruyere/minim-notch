@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
@@ -430,6 +430,68 @@ pub fn show(window: &WebviewWindow) -> tauri::Result<()> {
     platform::prepare_overlay(window)
 }
 
+/// Hidden because an app is fullscreen on the notch's screen (DF-0002).
+static FULLSCREEN_HIDDEN: AtomicBool = AtomicBool::new(false);
+/// While hidden for a fullscreen app: shown until then (`reveal`).
+static REVEAL_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Whether the notch is hidden for a fullscreen app.
+pub fn hidden_by_fullscreen() -> bool {
+    FULLSCREEN_HIDDEN.load(Ordering::Relaxed)
+}
+
+/// How long the front's slide in or out takes when revealing
+/// (`REVEAL_SLIDE_MS` in src/App.svelte), and a margin after it.
+const REVEAL_TAIL: Duration = Duration::from_millis(450);
+/// The front gets the "reveal" event before the window shows: it puts the
+/// notch out of sight first, then slides it in.
+const REVEAL_SHOW_DELAY: Duration = Duration::from_millis(60);
+
+/// A key taken over from Windows (ADR-0020) while the notch is hidden for a
+/// fullscreen app (DF-0030): the notch replaces Windows' flyout. The front
+/// slides it in from the edge with `module` alone for `duration`, then out;
+/// the window then hides again ("reveal-end"). Nothing otherwise.
+pub fn reveal(app: &AppHandle, module: &str, duration: Duration) {
+    if !hidden_by_fullscreen() || app.state::<AppState>().user_hidden.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(window) = app.get_webview_window(NOTCH_LABEL) else {
+        return;
+    };
+    let now = Instant::now();
+    let until = now + duration + REVEAL_TAIL;
+    let showing = REVEAL_UNTIL
+        .lock()
+        .unwrap()
+        .replace(until)
+        .is_some_and(|last| last > now);
+    let _ = app.emit(
+        "reveal",
+        serde_json::json!({ "module": module, "ms": duration.as_millis() as u64 }),
+    );
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if !showing {
+            std::thread::sleep(REVEAL_SHOW_DELAY);
+            if let Err(e) = show(&window) {
+                log::warn!("cannot reveal the notch: {e}");
+            }
+        }
+        std::thread::sleep(until.saturating_duration_since(Instant::now()));
+        // Another key since: that one hides it. The fullscreen app gone:
+        // the watcher shows it for good.
+        let mut last = REVEAL_UNTIL.lock().unwrap();
+        if hidden_by_fullscreen() && last.is_some_and(|last| last <= Instant::now()) {
+            *last = None;
+            drop(last);
+            if let Err(e) = window.hide() {
+                log::warn!("cannot hide the notch again: {e}");
+            }
+            let _ = app.emit("reveal-end", ());
+        }
+    });
+}
+
 /// Shows or hides the notch on the user's request (tray menu).
 pub fn set_user_visible(app: &AppHandle, visible: bool) {
     app.state::<AppState>()
@@ -499,6 +561,11 @@ pub fn spawn_watcher(app: AppHandle) {
                 continue;
             }
             fullscreen = now_fullscreen;
+            FULLSCREEN_HIDDEN.store(fullscreen, Ordering::Relaxed);
+            if !fullscreen && REVEAL_UNTIL.lock().unwrap().take().is_some() {
+                // Back to normal in the middle of a reveal (DF-0030).
+                let _ = app.emit("reveal-end", ());
+            }
             if fullscreen {
                 log::info!(
                     "fullscreen app on the notch screen ({}): notch hidden",

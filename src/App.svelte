@@ -73,6 +73,11 @@
   // src-tauri/src/notch.rs too (used before the first report).
   const FLARE = 6
   const ALERT_MS = 4000
+  // Revealing over a fullscreen app (DF-0030): the slide in or out
+  // (`REVEAL_TAIL` in src-tauri/src/notch.rs leaves room for it), and when
+  // it starts, after the window shows (`REVEAL_SHOW_DELAY` there).
+  const REVEAL_SLIDE_MS = 300
+  const REVEAL_IN_DELAY_MS = 120
   // Tucked into the edge (DF-0018): what stays visible of each shape, and of
   // the band along the edge that brings them all out.
   const SLIVER = 2
@@ -133,13 +138,21 @@
   const duration = $derived(speedMs[status.speed])
   // Pinned modules live in their own mini-notch, not in the notch (DF-0012).
   const notchSections = $derived(content.sections.filter((s) => !s.pin))
-  // The notch's latest spotlighted module (pinned ones have their own pin).
+  // Over a fullscreen app, which hides the notch (DF-0030): a key taken
+  // over from Windows slides the notch in from the edge with that module
+  // alone (pinned or not, no pins), then out ("reveal", "reveal-end").
+  let reveal = $state<string | null>(null)
+  // Out of sight, beyond the edge: before sliding in, and at the end.
+  let revealOut = $state(false)
+  // The notch's latest spotlighted module (pinned ones have their own pin);
+  // the revealed one.
   const spotlight = $derived(
-    spotlights.findLast((m) => notchSections.some((s) => s.module === m)) ?? null,
+    reveal ?? spotlights.findLast((m) => notchSections.some((s) => s.module === m)) ?? null,
   )
   // What the closed notch chooses from: the spotlighted module alone.
   const compactSections = $derived.by(() => {
-    const shown = spotlight && notchSections.find((s) => s.module === spotlight)
+    const sections = reveal ? content.sections : notchSections
+    const shown = spotlight && sections.find((s) => s.module === spotlight)
     return shown ? [shown] : notchSections
   })
   // Opens on hover even without items, to show the modules' notes (ADR-0009).
@@ -265,7 +278,9 @@
   // Pins (DF-0012): next to the notch, the first in display order closest to
   // it; above and below the whole stack on the left / right edges. A pin
   // opens outwards (away from the notch) and towards the inside of the screen.
-  const pinned = $derived(content.sections.filter((s) => s.pin && s.items.length > 0))
+  const pinned = $derived(
+    reveal ? [] : content.sections.filter((s) => s.pin && s.items.length > 0),
+  )
   function pinOpen(module: string): boolean {
     // Some modules keep their pin small, hovered or not (the Companion).
     if (pinned.find((s) => s.module === module)?.pinOpens === false) return false
@@ -405,6 +420,19 @@
     if (!tucked) return { x: 0, y: 0 }
     const compact = compactShape(status.edge, status.style)
     const by = (vertical ? compact.width : compact.height) - SLIVER
+    return {
+      top: { x: 0, y: -by },
+      bottom: { x: 0, y: by },
+      left: { x: -by, y: 0 },
+      right: { x: by, y: 0 },
+    }[status.edge]
+  })
+  // Revealing over a fullscreen app: the whole notch beyond the edge, curves
+  // included (the window, moved off the edge for a pill, clips it).
+  const revealShift = $derived.by(() => {
+    if (!reveal || !revealOut) return null
+    const notch = cardRects[0]
+    const by = (vertical ? notch.width : notch.height) + FLARE + 4
     return {
       top: { x: 0, y: -by },
       bottom: { x: 0, y: by },
@@ -589,6 +617,7 @@
   }
 
   let alertTimer: ReturnType<typeof setTimeout> | undefined
+  let revealTimer: ReturnType<typeof setTimeout> | undefined
   // Each spotlight's timer, start and length, by module.
   const spotlightTimers: Record<string, ReturnType<typeof setTimeout>> = {}
   const spotlightTimes: Record<string, { since: number; ms: number }> = {}
@@ -697,6 +726,25 @@
         spotlightTimes[module] = { since: Date.now(), ms: e.payload.ms }
         endSpotlight(module)
       }),
+      // Over a fullscreen app (DF-0030): the window shows a moment after
+      // this, the notch out of sight, then it slides in; out at the end of
+      // the module's time, and the window hides ("reveal-end").
+      listen<{ module: string; ms: number }>('reveal', (e) => {
+        clearTimeout(revealTimer)
+        if (reveal === null) {
+          revealOut = true
+          setTimeout(() => (revealOut = false), REVEAL_IN_DELAY_MS)
+        } else {
+          revealOut = false
+        }
+        reveal = e.payload.module
+        revealTimer = setTimeout(() => (revealOut = true), e.payload.ms)
+      }),
+      listen('reveal-end', () => {
+        clearTimeout(revealTimer)
+        reveal = null
+        revealOut = false
+      }),
       // The settings' opacity and grain sliders, live while they move;
       // saved on release, which brings them back through the status.
       listen<{ opacity: number; grain: number }>('notch-look-preview', (e) =>
@@ -742,8 +790,12 @@
 <!-- The notch and its pins slide into the edge together when tucked. -->
 <div
   class="layer"
-  style:transform={tucked ? `translate(${tuck.x}px, ${tuck.y}px)` : null}
-  style:--duration="{duration}ms"
+  style:transform={revealShift
+    ? `translate(${revealShift.x}px, ${revealShift.y}px)`
+    : tucked
+      ? `translate(${tuck.x}px, ${tuck.y}px)`
+      : null}
+  style:--duration="{reveal ? REVEAL_SLIDE_MS : duration}ms"
 >
 <Notch
   {cards}

@@ -5,6 +5,7 @@
 #[cfg(windows)]
 mod endpoint;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -60,6 +61,9 @@ struct Inner {
     level: Mutex<Option<Level>>,
     /// To the audio thread, while the module runs.
     commands: Mutex<Option<Sender<Command>>>,
+    /// A volume key was taken over from Windows: its change shows even over
+    /// a fullscreen app (ADR-0020).
+    key_pending: AtomicBool,
 }
 
 impl Inner {
@@ -74,7 +78,11 @@ impl Inner {
         if let Some(host) = self.host.get() {
             host.refresh();
             if external && level.is_some() {
-                host.spotlight(SPOTLIGHT);
+                if self.key_pending.swap(false, Ordering::Relaxed) {
+                    host.reveal(SPOTLIGHT);
+                } else {
+                    host.spotlight(SPOTLIGHT);
+                }
             }
         }
     }
@@ -91,7 +99,10 @@ impl Inner {
         platform::capture_keys(
             KeyGroup::Volume,
             wanted.then(|| -> platform::KeyHandler {
-                Arc::new(move |key| inner.send(Command::Key(key)))
+                Arc::new(move |key| {
+                    inner.key_pending.store(true, Ordering::Relaxed);
+                    inner.send(Command::Key(key));
+                })
             }),
         );
     }

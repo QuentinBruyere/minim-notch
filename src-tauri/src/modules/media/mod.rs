@@ -160,7 +160,9 @@ impl Inner {
 
     /// A media key taken over from Windows: exactly like the notch's buttons.
     /// A new track shows briefly as always; play / pause only changes the
-    /// shown state (the faded cover). Called on the key hook's thread.
+    /// shown state (the faded cover). Over a fullscreen app, which hides the
+    /// notch, it shows briefly in Windows' stead. Called on the key hook's
+    /// thread: the notch is shown from a thread of its own.
     fn key(&self, key: Key) {
         self.send(match key {
             Key::PlayPause => Command::TogglePlayPause,
@@ -168,6 +170,15 @@ impl Inner {
             Key::Previous => Command::Previous,
             _ => return,
         });
+        if let Some(host) = self.host.get().cloned()
+            && host.hidden_by_fullscreen()
+        {
+            std::thread::spawn(move || {
+                // The app's new state first.
+                std::thread::sleep(Duration::from_millis(150));
+                host.reveal(SPOTLIGHT);
+            });
+        }
     }
 
     fn send(&self, command: Command) {
@@ -188,10 +199,6 @@ impl Module for Media {
 
     fn description(&self) -> String {
         t!("media.description")
-    }
-
-    fn enabled_by_default(&self) -> bool {
-        false
     }
 
     fn start(&self, host: &Host) {

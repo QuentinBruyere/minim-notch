@@ -311,6 +311,19 @@ impl Host {
         );
     }
 
+    /// Like `spotlight`, for a key taken over from Windows (ADR-0020): the
+    /// notch replaces Windows' flyout, so it also shows while hidden for a
+    /// fullscreen app, for that time.
+    pub fn reveal(&self, duration: std::time::Duration) {
+        self.spotlight(duration);
+        crate::notch::reveal(&self.app, self.id, duration);
+    }
+
+    /// Whether the notch is hidden for a fullscreen app (DF-0002).
+    pub fn hidden_by_fullscreen(&self) -> bool {
+        crate::notch::hidden_by_fullscreen()
+    }
+
     /// Short message shown in the notch for a few seconds.
     pub fn notice(&self, message: &str) {
         let _ = self.app.emit("notice", message);

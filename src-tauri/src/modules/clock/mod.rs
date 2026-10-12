@@ -44,10 +44,6 @@ impl Module for Clock {
         crate::t!("clock.description")
     }
 
-    fn enabled_by_default(&self) -> bool {
-        false
-    }
-
     fn start(&self, host: &Host) {
         let inner = &self.inner;
         let _ = inner.host.set(host.clone());
