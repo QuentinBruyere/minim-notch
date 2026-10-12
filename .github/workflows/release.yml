@@ -52,7 +52,9 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Minim Notch ${{ github.ref_name }}
-          releaseBody: See the assets below to download the Windows installer.
+          # Also the notes shown by the in-app update banner: left empty, the
+          # download guide below is for the GitHub page only.
+          releaseBody: ''
           releaseDraft: false
           # A pre-release would not be "latest": installed copies read
           # releases/latest/download/latest.json.
@@ -62,3 +64,32 @@ jobs:
           # Signed update files, only when publishing: a plain
           # `pnpm tauri build` works without the key.
           args: --config src-tauri/tauri.release.conf.json
+
+      # The updater reads the signatures inside latest.json: the .sig files
+      # would only confuse people looking for the installer.
+      - name: Remove the signature files and add the download guide
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $assets = gh release view $env:TAG --json assets --jq '.assets[].name'
+          foreach ($name in $assets | Where-Object { $_ -like '*.sig' }) {
+            gh release delete-asset $env:TAG $name --yes
+          }
+          $installer = $assets | Where-Object { $_ -like '*-setup.exe' } | Select-Object -First 1
+          $changes = gh api "repos/${{ github.repository }}/releases/generate-notes" -f tag_name=$env:TAG --jq .body
+          $changes = $changes -join "`n"
+          $body = @"
+          ## Download
+
+          **Windows 10 / 11: [$installer](https://github.com/${{ github.repository }}/releases/download/$env:TAG/$installer)**, then run it.
+
+          Already installed? Minim Notch tells you about this version itself (Settings, About).
+
+          The latest.json file is read by the automatic updates: nothing to download.
+
+          $changes
+          "@
+          Set-Content -Path notes.md -Value $body -Encoding utf8NoBOM
+          gh release edit $env:TAG --notes-file notes.md

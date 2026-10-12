@@ -15,7 +15,7 @@
 
 <br />
 
-<img src="assets/screenshot-open.png" alt="The open notch: three Claude Code sessions with their companions, between pinned modules" width="760" />
+<img src="assets/screenshot-open.png" alt="The open notch: three Claude Code sessions with their companions, the music playing, between pinned modules" width="760" />
 
 <img src="assets/screenshot-closed.png" alt="The closed notch: the most urgent session, between pinned modules" width="760" />
 
@@ -73,7 +73,11 @@ From the settings, Minim Notch adds hooks to your Claude Code settings (`~/.clau
 
 ## Download
 
-No public release yet: the first Windows version is on its way. Until then, you can build it from source.
+**Windows 10 / 11**: open the [latest release](https://github.com/QuentinBruyere/minim-notch/releases/latest), download `Minim.Notch_<version>_x64-setup.exe` and run it. Minim Notch then tells you when a new version is out.
+
+macOS and Linux are not supported yet.
+
+Windows may warn about an unknown publisher (SmartScreen): the installer is not signed with a paid certificate yet. Click "More info", then "Run anyway".
 
 ## Build from source
 
@@ -82,7 +86,7 @@ Requirements: [Rust](https://rustup.rs/), [Node.js](https://nodejs.org/) and [pn
 ```sh
 pnpm install
 pnpm tauri dev      # run with hot reload
-pnpm tauri build    # build the installers (Windows: NSIS and MSI)
+pnpm tauri build    # build the installer (Windows: NSIS)
 ```
 
 Checks run by the CI:

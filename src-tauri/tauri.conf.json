@@ -38,8 +38,7 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis",
-      "msi"
+      "nsis"
     ],
     "category": "DeveloperTool",
     "shortDescription": "Un notch qui affiche l'activité de Claude Code",
