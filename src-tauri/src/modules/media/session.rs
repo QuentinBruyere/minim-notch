@@ -187,22 +187,27 @@ fn control(session: Option<Session>, act: impl FnOnce(&Session) -> Result<bool>)
 /// What the thread remembers between two reads.
 #[derive(Default)]
 struct Memory {
-    /// The current track's cover, once found: (track key, data URL).
-    cover: Option<(String, String)>,
-    /// A track whose cover is not there yet, and how many reads were asked
-    /// again for it.
-    missing: Option<(String, usize)>,
+    /// The current track (its key) and when it was first seen.
+    track: Option<(String, Instant)>,
+    /// The current track's cover, as a data URL.
+    cover: Option<String>,
     /// Apps that gave a progress once: while a new track loads, they keep
     /// an empty bar rather than none.
     with_timeline: HashSet<String>,
 }
 
-/// When to read again a track without cover: some apps (Apple Music, a new
-/// album) tell the track before its cover is ready.
-const COVER_RETRIES: [Duration; 3] = [
+/// Some apps (Apple Music, a new album) tell the track before its cover:
+/// none yet, or still the previous track's one. The cover is read again at
+/// each change during this time after a new track, then kept.
+const COVER_SETTLING: Duration = Duration::from_secs(5);
+
+/// Reads asked in that time, for apps that tell nothing when the cover
+/// arrives.
+const COVER_RETRIES: [Duration; 4] = [
     Duration::from_millis(500),
     Duration::from_millis(1500),
     Duration::from_secs(3),
+    COVER_SETTLING,
 ];
 
 fn read(session: &Session, memory: &mut Memory, refresh: &Sender<Command>) -> Result<Track> {
@@ -215,28 +220,26 @@ fn read(session: &Session, memory: &mut Memory, refresh: &Sender<Command>) -> Re
 
     let app = session.SourceAppUserModelId()?.to_string();
     let key = format!("{app}\u{0}{title}\u{0}{artist}");
-    // A cover found is kept for the track; a missing one is asked again.
-    if memory.cover.as_ref().is_none_or(|(k, _)| k != &key) {
-        match read_cover(&properties).ok().flatten() {
-            Some(url) => {
-                memory.cover = Some((key.clone(), url));
-                memory.missing = None;
-            }
-            None => {
-                memory.cover = None;
-                let tries = match &memory.missing {
-                    Some((k, tries)) if k == &key => *tries,
-                    _ => 0,
-                };
-                if let Some(&wait) = COVER_RETRIES.get(tries) {
-                    let refresh = refresh.clone();
-                    std::thread::spawn(move || {
-                        std::thread::sleep(wait);
-                        let _ = refresh.send(Command::Refresh);
-                    });
-                }
-                memory.missing = Some((key.clone(), tries + 1));
-            }
+    let new_track = memory.track.as_ref().is_none_or(|(k, _)| k != &key);
+    if new_track {
+        memory.track = Some((key, Instant::now()));
+        memory.cover = None;
+        for wait in COVER_RETRIES {
+            let refresh = refresh.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(wait);
+                let _ = refresh.send(Command::Refresh);
+            });
+        }
+    }
+    let settling = memory
+        .track
+        .as_ref()
+        .is_some_and(|(_, since)| since.elapsed() <= COVER_SETTLING);
+    if new_track || settling {
+        // A cover that goes missing while settling keeps the last one.
+        if let Some(url) = read_cover(&properties).ok().flatten() {
+            memory.cover = Some(url);
         }
     }
     let timeline = timeline(session, playing, controls.IsPlaybackPositionEnabled()?)
@@ -249,7 +252,7 @@ fn read(session: &Session, memory: &mut Memory, refresh: &Sender<Command>) -> Re
     Ok(Track {
         title,
         artist,
-        cover: memory.cover.as_ref().map(|(_, url)| url.clone()),
+        cover: memory.cover.clone(),
         playing,
         can_previous: controls.IsPreviousEnabled()?,
         can_next: controls.IsNextEnabled()?,
