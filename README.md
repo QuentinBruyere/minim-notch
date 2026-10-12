@@ -4,7 +4,7 @@
 
 # Minim Notch
 
-**Open-core minimalist notch for Mac / PC / Linux**
+**Open-core minimalist notch for PC / Mac / Linux**
 
 [![CI](https://github.com/QuentinBruyere/minim-notch/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/QuentinBruyere/minim-notch/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
