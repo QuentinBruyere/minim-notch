@@ -500,3 +500,192 @@ pub fn bring_to_front(window: &WebviewWindow) -> tauri::Result<()> {
     }
     Ok(())
 }
+
+// --- Volume and media keys taken over from Windows (ADR-0020) ---
+
+use std::sync::Mutex;
+
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, UnregisterHotKey};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, WM_APP, WM_HOTKEY, WM_KEYDOWN, WM_SYSKEYDOWN,
+};
+
+use super::{Key, KeyGroup, KeyHandler};
+
+/// Whether each group (`KeyGroup as usize`) is taken over: read by the hook
+/// on every key of the system, without a lock.
+static KEYS_ON: [AtomicBool; 2] = [const { AtomicBool::new(false) }; 2];
+/// What each group's module does with its keys; locked only for a key taken.
+static KEY_HANDLERS: Mutex<[Option<KeyHandler>; 2]> = Mutex::new([None, None]);
+/// Thread id of the running keyboard hook thread, 0 when none.
+static KEY_THREAD: AtomicU32 = AtomicU32::new(0);
+/// A keyboard hook thread has been spawned and has not exited yet.
+static KEY_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Takes a group of keys over from Windows (`Some`), or gives them back
+/// (`None`). The hook runs while any group is taken.
+pub fn capture_keys(group: KeyGroup, handler: Option<KeyHandler>) {
+    let on = handler.is_some();
+    KEY_HANDLERS.lock().unwrap()[group as usize] = handler;
+    KEYS_ON[group as usize].store(on, Ordering::SeqCst);
+    let thread = KEY_THREAD.load(Ordering::SeqCst);
+    if thread != 0 {
+        unsafe { PostThreadMessageW(thread, SYNC_HOTKEYS, 0, 0) };
+    }
+    if keys_wanted() {
+        if !KEY_RUNNING.swap(true, Ordering::SeqCst) {
+            std::thread::spawn(run_key_thread);
+        }
+    } else {
+        let thread = KEY_THREAD.load(Ordering::SeqCst);
+        if thread != 0 {
+            unsafe { PostThreadMessageW(thread, WM_QUIT, 0, 0) };
+        }
+    }
+}
+
+fn keys_wanted() -> bool {
+    KEYS_ON.iter().any(|on| on.load(Ordering::SeqCst))
+}
+
+fn run_key_thread() {
+    unsafe {
+        let hook = SetWindowsHookExW(
+            WH_KEYBOARD_LL,
+            Some(key_hook),
+            GetModuleHandleW(std::ptr::null()),
+            0,
+        );
+        if hook.is_null() {
+            log::error!("cannot install the media keys hook");
+        } else {
+            KEY_THREAD.store(GetCurrentThreadId(), Ordering::SeqCst);
+            log::info!("media keys taken over");
+            let mut hotkeys = [false; KEYS.len()];
+            // Given back while we were starting: leave right away.
+            if keys_wanted() {
+                sync_hotkeys(&mut hotkeys);
+                let mut msg: MSG = zeroed();
+                // Low-level hooks are called through this thread's message
+                // loop, which also gets the hotkeys.
+                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                    match msg.message {
+                        WM_HOTKEY => {
+                            if let Some(key) = key_of(msg.wParam as u32) {
+                                dispatch(key);
+                            }
+                        }
+                        SYNC_HOTKEYS => sync_hotkeys(&mut hotkeys),
+                        _ => {}
+                    }
+                }
+            }
+            for (&(vk, _), registered) in KEYS.iter().zip(hotkeys) {
+                if registered {
+                    UnregisterHotKey(std::ptr::null_mut(), vk as i32);
+                }
+            }
+            KEY_THREAD.store(0, Ordering::SeqCst);
+            UnhookWindowsHookEx(hook);
+            log::info!("media keys given back");
+        }
+    }
+    KEY_RUNNING.store(false, Ordering::SeqCst);
+    // Taken again while we were shutting down.
+    if keys_wanted() && !KEY_RUNNING.swap(true, Ordering::SeqCst) {
+        std::thread::spawn(run_key_thread);
+    }
+}
+
+/// The keys we can take over, by virtual-key code.
+const KEYS: [(u32, Key); 6] = [
+    (0xAD, Key::VolumeMute),
+    (0xAE, Key::VolumeDown),
+    (0xAF, Key::VolumeUp),
+    (0xB0, Key::Next),
+    (0xB1, Key::Previous),
+    (0xB3, Key::PlayPause),
+];
+
+/// Asks the key thread to register or free its hotkeys.
+const SYNC_HOTKEYS: u32 = WM_APP + 1;
+
+/// While one of our own windows is in front (the settings), Windows does
+/// not call our keyboard hook: the key would reach the window and Windows
+/// would show its flyout. The keys taken over are also registered as
+/// hotkeys of the key thread, which Windows handles before the window gets
+/// them; otherwise the hook takes them first. Registered with the key's
+/// code as id, on the key thread only.
+fn sync_hotkeys(registered: &mut [bool; KEYS.len()]) {
+    for (&(vk, key), registered) in KEYS.iter().zip(registered) {
+        let wanted = KEYS_ON[key.group() as usize].load(Ordering::SeqCst);
+        if wanted && !*registered {
+            *registered = unsafe { RegisterHotKey(std::ptr::null_mut(), vk as i32, 0, vk) } != 0;
+            if !*registered {
+                log::warn!("cannot register the hotkey {vk:#x}");
+            }
+        } else if !wanted && *registered {
+            unsafe { UnregisterHotKey(std::ptr::null_mut(), vk as i32) };
+            *registered = false;
+        }
+    }
+}
+
+/// Hands a key to its module, if its group is taken over; false lets it
+/// through to Windows. Never waits: a busy lock lets the key through.
+fn dispatch(key: Key) -> bool {
+    if !KEYS_ON[key.group() as usize].load(Ordering::Relaxed) {
+        return false;
+    }
+    let Ok(handlers) = KEY_HANDLERS.try_lock() else {
+        return false;
+    };
+    let Some(handler) = handlers[key.group() as usize].clone() else {
+        return false;
+    };
+    drop(handlers);
+    handler(key);
+    true
+}
+
+/// The key behind a virtual-key code, if it is one we can take over.
+fn key_of(vk: u32) -> Option<Key> {
+    KEYS.iter()
+        .find(|(code, _)| *code == vk)
+        .map(|(_, key)| *key)
+}
+
+/// Runs for every key of the whole system: other keys only cost a match on
+/// their code. A key taken over goes to its module on the way down, and is
+/// kept from Windows both ways (no flyout).
+unsafe extern "system" fn key_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let info = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
+        if let Some(key) = key_of(info.vkCode)
+            && KEYS_ON[key.group() as usize].load(Ordering::Relaxed)
+        {
+            let down = wparam == WM_KEYDOWN as WPARAM || wparam == WM_SYSKEYDOWN as WPARAM;
+            if !down {
+                return 1;
+            }
+            if dispatch(key) {
+                return 1;
+            }
+        }
+    }
+    unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+
+    #[test]
+    fn only_volume_and_media_keys_are_known() {
+        assert_eq!(key_of(0xAF), Some(Key::VolumeUp));
+        assert_eq!(key_of(0xB3), Some(Key::PlayPause));
+        assert_eq!(key_of(0x41), None);
+        assert_eq!(Key::VolumeMute.group(), KeyGroup::Volume);
+        assert_eq!(Key::Next.group(), KeyGroup::Media);
+    }
+}

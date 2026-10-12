@@ -106,6 +106,8 @@
   "media.description": "パソコンで再生中のメディアを、ノッチから操作します。",
   "media.hide_text": "テキストを隠す",
   "media.hide_text_hint": "閉じたノッチとピン留めにはジャケットだけを表示し、曲が変わると「タイトル – アーティスト」を 3 秒間表示します。",
+  "media.replace_windows": "Windows の表示を置き換える",
+  "media.replace_windows_hint": "再生 / 一時停止、次へ、前へのキーを Minim Notch が処理します。Windows のウィンドウは表示されず、代わりにノッチに音楽が表示されます。",
   "media.name": "メディア",
   "media.next": "次へ",
   "media.none": "再生中のメディアはありません",
@@ -313,6 +315,8 @@
   "volume.name": "音量",
   "volume.no_output": "オーディオ出力なし",
   "volume.percent": "{percent}%",
+  "volume.replace_windows": "Windows の表示を置き換える",
+  "volume.replace_windows_hint": "音量キーを Minim Notch が処理します。Windows の音量ウィンドウは表示されず、代わりにノッチに音量が表示されます。",
   "volume.unmute": "ミュート解除",
   "volume.windows_only": "Windows でのみ利用できます"
 }

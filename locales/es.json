@@ -106,6 +106,8 @@
   "media.description": "Lo que suena en el ordenador, controlado desde el notch.",
   "media.hide_text": "Ocultar el texto",
   "media.hide_text_hint": "El notch cerrado y el anclado solo muestran la portada; «Título – Artista» aparece 3 segundos en cada cambio de pista.",
+  "media.replace_windows": "Reemplazar la ventana de Windows",
+  "media.replace_windows_hint": "Las teclas de reproducir/pausa, siguiente y anterior pasan por Minim Notch: Windows ya no muestra su ventana, el notch muestra la música en su lugar.",
   "media.name": "Multimedia",
   "media.next": "Siguiente",
   "media.none": "Ningún contenido",
@@ -313,6 +315,8 @@
   "volume.name": "Volumen",
   "volume.no_output": "Ninguna salida de audio",
   "volume.percent": "{percent} %",
+  "volume.replace_windows": "Reemplazar la ventana de Windows",
+  "volume.replace_windows_hint": "Las teclas de volumen pasan por Minim Notch: Windows ya no muestra su ventana de volumen, el notch muestra el nivel en su lugar.",
   "volume.unmute": "Activar el sonido",
   "volume.windows_only": "Solo disponible en Windows"
 }

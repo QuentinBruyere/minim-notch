@@ -8,11 +8,24 @@ mod endpoint;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
 use crate::module::{Action, Compact, Host, Icon, Item, Module, Slider};
+use crate::platform::{self, Key, KeyGroup};
 use crate::t;
 
 /// How long the closed notch shows a volume changed elsewhere.
 const SPOTLIGHT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// The module's settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub(crate) struct Settings {
+    /// The volume keys are handled here and Windows shows nothing
+    /// (ADR-0020). Windows only.
+    pub replace_windows: bool,
+}
 
 /// The output's volume, as shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +40,8 @@ pub(crate) struct Level {
 pub(crate) enum Command {
     Set(u8),
     ToggleMute,
+    /// A volume key taken over from Windows.
+    Key(Key),
     /// The default output changed: follow the new one.
     DeviceChanged,
     Stop,
@@ -40,6 +55,7 @@ pub struct Volume {
 #[derive(Default)]
 struct Inner {
     host: OnceLock<Host>,
+    settings: Mutex<Settings>,
     /// `None`: no audio output (or not read yet).
     level: Mutex<Option<Level>>,
     /// To the audio thread, while the module runs.
@@ -49,14 +65,35 @@ struct Inner {
 impl Inner {
     /// A new level from the audio thread; `external`: not set from the notch,
     /// which then shows it briefly.
-    fn changed(&self, level: Option<Level>, external: bool) {
-        *self.level.lock().unwrap() = level;
+    fn changed(self: &Arc<Self>, level: Option<Level>, external: bool) {
+        let had = std::mem::replace(&mut *self.level.lock().unwrap(), level).is_some();
+        // An output appeared or went away: the keys follow.
+        if had != level.is_some() {
+            self.capture_keys();
+        }
         if let Some(host) = self.host.get() {
             host.refresh();
             if external && level.is_some() {
                 host.spotlight(SPOTLIGHT);
             }
         }
+    }
+
+    /// Takes the volume keys over while asked to and there is an output to
+    /// act on; else Windows keeps them (ADR-0020).
+    fn capture_keys(self: &Arc<Self>) {
+        // One lock at a time (CLAUDE.md, Verrous).
+        let asked = self.settings.lock().unwrap().replace_windows;
+        let running = self.commands.lock().unwrap().is_some();
+        let output = self.level.lock().unwrap().is_some();
+        let wanted = asked && running && output;
+        let inner = Arc::clone(self);
+        platform::capture_keys(
+            KeyGroup::Volume,
+            wanted.then(|| -> platform::KeyHandler {
+                Arc::new(move |key| inner.send(Command::Key(key)))
+            }),
+        );
     }
 
     fn send(&self, command: Command) {
@@ -85,12 +122,14 @@ impl Module for Volume {
 
     fn start(&self, host: &Host) {
         let _ = self.inner.host.set(host.clone());
+        *self.inner.settings.lock().unwrap() = host.load_settings();
         #[cfg(windows)]
         {
             let inner = Arc::clone(&self.inner);
             let commands = endpoint::spawn(move |level, external| inner.changed(level, external));
             *self.inner.commands.lock().unwrap() = Some(commands);
         }
+        self.inner.capture_keys();
         host.refresh();
     }
 
@@ -98,6 +137,27 @@ impl Module for Volume {
         self.inner.send(Command::Stop);
         *self.inner.commands.lock().unwrap() = None;
         *self.inner.level.lock().unwrap() = None;
+        self.inner.capture_keys();
+    }
+
+    fn settings(&self) -> Value {
+        serde_json::to_value(&*self.inner.settings.lock().unwrap()).unwrap_or(Value::Null)
+    }
+
+    /// `update`: replaces the settings with `args` (the whole object).
+    fn call(&self, action: &str, args: Value) -> Result<Value, String> {
+        if action != "update" {
+            return Err(format!("unknown action {action}"));
+        }
+        let settings: Settings =
+            serde_json::from_value(args).map_err(|e| t!("settings.invalid", error = e))?;
+        *self.inner.settings.lock().unwrap() = settings.clone();
+        self.inner.capture_keys();
+        if let Some(host) = self.inner.host.get() {
+            host.save_settings(&settings);
+            host.settings_changed();
+        }
+        Ok(Value::Null)
     }
 
     fn items(&self) -> Vec<Item> {
@@ -173,6 +233,8 @@ fn item(level: Level) -> Item {
         // The compact views show the icon, and the value only for a moment
         // after a change (`Host::spotlight`), like the stopwatch at rest.
         quiet: true,
+        // Compact views: icon, bar and number, or "Muted" (DF-0027).
+        meter: true,
         icon: Some(icon),
         ..Item::default()
     }
@@ -194,6 +256,7 @@ mod tests {
         assert_eq!(on.icon_action.as_ref().map(|a| a.id.as_str()), Some("mute"));
         assert_eq!(on.icon, Some(Icon::VolumeMedium));
         assert!(on.quiet);
+        assert!(on.meter);
         let off = item(Level {
             percent: 45,
             muted: true,

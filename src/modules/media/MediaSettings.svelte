@@ -6,6 +6,7 @@
   interface Data {
     scroll: boolean
     hideText: boolean
+    replaceWindows: boolean
   }
 
   let { data: raw, call }: ModuleSettingsProps = $props()
@@ -39,5 +40,18 @@
     class="switch"
     checked={data.hideText}
     onchange={(e) => update({ hideText: e.currentTarget.checked })}
+  />
+</label>
+<!-- The media keys handled here, Windows' window gone (ADR-0020). -->
+<label class="row separated">
+  <div>
+    <div class="label">{t('media.replace_windows')}</div>
+    <div class="hint">{t('media.replace_windows_hint')}</div>
+  </div>
+  <input
+    type="checkbox"
+    class="switch"
+    checked={data.replaceWindows}
+    onchange={(e) => update({ replaceWindows: e.currentTarget.checked })}
   />
 </label>

@@ -19,6 +19,7 @@ use windows::Win32::System::Com::{
 use windows::core::{GUID, PCWSTR, Result, implement};
 
 use super::{Command, Level};
+use crate::platform::Key;
 
 /// Marks the changes made from the notch: they are not shown briefly.
 const FROM_NOTCH: GUID = GUID::from_u128(0x5f3a_9c2e_7b41_4d8a_9e06_1c2b_3d4e_5f60);
@@ -75,6 +76,14 @@ fn run(receiver: &Receiver<Command>, devices: Sender<Command>, on_change: &OnCha
                     o.toggle_mute();
                 }
             }
+            Command::Key(key) => {
+                if let Some(o) = &output {
+                    o.key(key);
+                    // Shown briefly even when nothing moved (already at the
+                    // top): the key was heard.
+                    on_change(o.level(), true);
+                }
+            }
         }
     }
     drop(output);
@@ -129,6 +138,32 @@ impl Output {
                 .SetMasterVolumeLevelScalar(f32::from(percent) / 100.0, &FROM_NOTCH);
             if percent > 0 && self.volume.GetMute().is_ok_and(|m| m.as_bool()) {
                 let _ = self.volume.SetMute(false, &FROM_NOTCH);
+            }
+        }
+    }
+
+    /// A volume key taken over from Windows (ADR-0020): Windows' own step,
+    /// and a key up or down brings the sound back, like Windows. Not marked
+    /// as from the notch, so it shows briefly.
+    fn key(&self, key: Key) {
+        let context = std::ptr::null();
+        unsafe {
+            let muted = self.volume.GetMute().is_ok_and(|m| m.as_bool());
+            match key {
+                Key::VolumeMute => {
+                    let _ = self.volume.SetMute(!muted, context);
+                }
+                Key::VolumeUp | Key::VolumeDown => {
+                    if muted {
+                        let _ = self.volume.SetMute(false, context);
+                    }
+                    let _ = if key == Key::VolumeUp {
+                        self.volume.VolumeStepUp(context)
+                    } else {
+                        self.volume.VolumeStepDown(context)
+                    };
+                }
+                _ => {}
             }
         }
     }

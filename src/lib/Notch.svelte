@@ -245,7 +245,7 @@
         <span
           class="row compact"
           class:bubble
-          class:slider={!!top.slider && !quiet}
+          class:slider={top.meter && !!top.slider && !quiet}
           bind:offsetWidth={rowWidth}
         >
           {#if dotted.shown.length > 0}
@@ -260,7 +260,7 @@
             <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
           {:else if quiet && ShownIcon}
             <ModuleIcon icon={ShownIcon} item={top} {onaction} />
-          {:else if top.slider && ShownIcon}
+          {:else if top.meter && top.slider && ShownIcon}
             <!-- A slider (the volume): its icon, its value as a bar across
                  the notch, then as a number; no label nor title. Its compact
                  text instead of the bar and number, if it has one (muted). -->
@@ -275,6 +275,12 @@
               <span class="value">{Math.round(top.slider.value)}</span>
             {/if}
           {:else}
+            {#if top.slider}
+              <!-- Another slider's value as a small bar (a track's progress). -->
+              <span class="meter">
+                <span style:width="{sliderPercent(top.slider)}%"></span>
+              </span>
+            {/if}
             {#if top.image !== null && shown}
               <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
             {/if}
@@ -287,7 +293,7 @@
               />
             {/if}
           {/if}
-          {#if compactTitle && !top.slider}<span class="muted">{compactTitle}</span>{/if}
+          {#if compactTitle && !top.meter}<span class="muted">{compactTitle}</span>{/if}
         </span>
       {/if}
     </div>

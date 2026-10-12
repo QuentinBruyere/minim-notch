@@ -13,13 +13,48 @@ pub struct Shape {
     pub detached: bool,
 }
 
+/// A volume or media key that a module can take over from Windows, which
+/// then shows nothing (ADR-0020).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Key {
+    VolumeUp,
+    VolumeDown,
+    VolumeMute,
+    PlayPause,
+    Next,
+    Previous,
+}
+
+/// The keys a module takes over, all at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyGroup {
+    /// Volume up, down, mute: the Volume module.
+    Volume,
+    /// Play / pause, next, previous: the Media module.
+    Media,
+}
+
+impl Key {
+    pub fn group(self) -> KeyGroup {
+        match self {
+            Key::VolumeUp | Key::VolumeDown | Key::VolumeMute => KeyGroup::Volume,
+            _ => KeyGroup::Media,
+        }
+    }
+}
+
+/// What a module does with a key it took over. Called on the key hook's
+/// thread: it must return at once (send a command to its own thread).
+pub type KeyHandler = std::sync::Arc<dyn Fn(Key) + Send + Sync>;
+
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
 pub use windows::{
-    bring_to_front, foreground_class, fullscreen_on_notch_screen, give_back_foreground, hide_frame,
-    os_version, prepare_overlay, restrict_to_shapes, set_cursor_resistance, set_resistance_rect,
-    set_resistance_strength, take_breakthrough, track_foreground,
+    bring_to_front, capture_keys, foreground_class, fullscreen_on_notch_screen,
+    give_back_foreground, hide_frame, os_version, prepare_overlay, restrict_to_shapes,
+    set_cursor_resistance, set_resistance_rect, set_resistance_strength, take_breakthrough,
+    track_foreground,
 };
 
 #[cfg(not(windows))]
@@ -62,6 +97,10 @@ pub fn restrict_to_shapes(
     ))?;
     crate::notch::place(window)
 }
+
+/// Taking keys over needs a system-wide keyboard hook: Windows only for now.
+#[cfg(not(windows))]
+pub fn capture_keys(_group: KeyGroup, _handler: Option<KeyHandler>) {}
 
 /// Cursor resistance needs a system-wide mouse hook: Windows only for now.
 #[cfg(not(windows))]

@@ -106,6 +106,8 @@
   "media.description": "What's playing on the computer, controlled from the notch.",
   "media.hide_text": "Hide the text",
   "media.hide_text_hint": "The closed notch and the pin only show the cover; \"Title – Artist\" shows for 3 seconds when the track changes.",
+  "media.replace_windows": "Replace the Windows display",
+  "media.replace_windows_hint": "The play / pause, next and previous keys go through Minim Notch: Windows no longer shows its window, the notch shows the music instead.",
   "media.name": "Media",
   "media.next": "Next",
   "media.none": "No media",
@@ -313,6 +315,8 @@
   "volume.name": "Volume",
   "volume.no_output": "No audio output",
   "volume.percent": "{percent}%",
+  "volume.replace_windows": "Replace the Windows display",
+  "volume.replace_windows_hint": "The volume keys go through Minim Notch: Windows no longer shows its volume window, the notch shows the level instead.",
   "volume.unmute": "Unmute",
   "volume.windows_only": "Only available on Windows"
 }

@@ -179,15 +179,26 @@ fn open_window(app: &AppHandle, focus: bool) -> tauri::Result<()> {
             Ok(())
         };
     }
-    let window =
+    let mut builder =
         WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
             .title(crate::t!("settings.window_title"))
             .inner_size(760.0, 560.0)
             .min_inner_size(600.0, 420.0)
             .center()
             .theme(window_theme(app))
-            .focused(focus)
-            .build()?;
+            .focused(focus);
+    // All windows share one WebView2, which refuses a window with other
+    // browser arguments: the notch's, from tauri.conf.json.
+    if let Some(args) = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find_map(|w| w.additional_browser_args.clone())
+    {
+        builder = builder.additional_browser_args(&args);
+    }
+    let window = builder.build()?;
     // Move mode only lasts while the settings are open.
     let handle = app.clone();
     window.on_window_event(move |event| {

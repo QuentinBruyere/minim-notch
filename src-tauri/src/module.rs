@@ -164,6 +164,9 @@ pub struct Item {
     /// the left / right edges, instead of the icon: the clock's hours over
     /// its minutes (DF-0027).
     pub stack: Vec<String>,
+    /// The compact views show its slider as a level: its icon, a bar and the
+    /// number (the volume, DF-0027), or its compact text instead (muted).
+    pub meter: bool,
     /// In the compact views, a text too long for its place scrolls instead
     /// of being cut (DF-0017).
     pub scroll: bool,

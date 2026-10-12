@@ -156,7 +156,7 @@
           <Cover src={top.image} icon={moduleUis[section.module]?.icon ?? Puzzle} dimmed={top.dimmed} />
         {:else if quiet}
           <ModuleIcon icon={Icon} item={top} {onaction} />
-        {:else if top.slider}
+        {:else if top.meter && top.slider}
           <!-- A slider (the volume): its icon, then its value as a number;
                its compact text instead, faint, if it has one (muted). -->
           <ModuleIcon icon={Icon} item={top} {onaction} />

@@ -59,8 +59,8 @@ Follow what comes next on the [roadmap](https://minim-notch.com/roadmap/).
 | **Date and time** | The time and the date, in the format you like. |
 | **Stopwatch** | Start, pause and reset, right from the notch. |
 | **Timer** | A countdown that rings when it is over. |
-| **Volume** (Windows) | A slider and a mute button, shown for a moment when the volume changes. |
-| **Media** (Windows) | What is playing on the computer (music, video, podcast), from any app, with its cover, a progress bar and play / pause / next buttons. |
+| **Volume** (Windows) | A slider and a mute button, shown for a moment when the volume changes. Optionally replaces the Windows volume pop-up: the volume keys then show in the notch only. |
+| **Media** (Windows) | What is playing on the computer (music, video, podcast), from any app, with its cover, a progress bar and play / pause / next buttons. Optionally takes over the media keys from Windows, whose pop-up then stays hidden. |
 | **Companion** | A companion that reacts to everything happening in the notch: music, a timer ringing, the time of day. |
 
 ### Official version

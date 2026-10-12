@@ -69,6 +69,9 @@ export interface Item {
   // Short lines stacked in the thin views of the left / right edges, instead
   // of the icon (the clock's hours over minutes, DF-0027).
   stack: string[]
+  // Compact views: its slider as a level, icon, bar and number (the volume),
+  // or its compact text instead (muted).
+  meter: boolean
   actions: Action[]
   // A slider in the open notch, between the title and the label.
   slider: Slider | null

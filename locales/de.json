@@ -106,6 +106,8 @@
   "media.description": "Was auf dem Computer läuft, direkt im Notch steuerbar.",
   "media.hide_text": "Text ausblenden",
   "media.hide_text_hint": "Der geschlossene Notch und das angeheftete Modul zeigen nur das Cover; „Titel – Interpret“ erscheint bei jedem Titelwechsel 3 Sekunden lang.",
+  "media.replace_windows": "Windows-Anzeige ersetzen",
+  "media.replace_windows_hint": "Die Tasten Wiedergabe/Pause, Weiter und Zurück laufen über Minim Notch: Windows zeigt sein Fenster nicht mehr an, stattdessen zeigt der Notch die Musik.",
   "media.name": "Medien",
   "media.next": "Weiter",
   "media.none": "Keine Medien",
@@ -313,6 +315,8 @@
   "volume.name": "Lautstärke",
   "volume.no_output": "Keine Audioausgabe",
   "volume.percent": "{percent} %",
+  "volume.replace_windows": "Windows-Anzeige ersetzen",
+  "volume.replace_windows_hint": "Die Lautstärketasten laufen über Minim Notch: Windows zeigt sein Lautstärkefenster nicht mehr an, stattdessen zeigt der Notch den Pegel.",
   "volume.unmute": "Ton einschalten",
   "volume.windows_only": "Nur unter Windows verfügbar"
 }

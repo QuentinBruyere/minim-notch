@@ -12,6 +12,7 @@ import ClockSettings from './clock/ClockSettings.svelte'
 import CompanionSettings from './companion/CompanionSettings.svelte'
 import MediaSettings from './media/MediaSettings.svelte'
 import TimerSettings from './timer/TimerSettings.svelte'
+import VolumeSettings from './volume/VolumeSettings.svelte'
 
 // What a module's settings component receives (ADR-0009).
 export interface ModuleSettingsProps {
@@ -38,5 +39,5 @@ export const coreModuleUis: ModuleUis = {
   media: { icon: Music, settings: MediaSettings },
   stopwatch: { icon: TimerIcon },
   timer: { icon: Hourglass, settings: TimerSettings },
-  volume: { icon: Volume2 },
+  volume: { icon: Volume2, settings: VolumeSettings },
 }

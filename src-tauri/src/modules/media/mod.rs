@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::module::{Action, Activity, Compact, Host, Icon, Item, Layout, Module, Slider, Tone};
+use crate::platform::{self, Key, KeyGroup};
 use crate::t;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -26,6 +27,9 @@ pub(crate) struct Settings {
     /// Closed notch and pin: only the cover; the text shows for a moment
     /// when the track changes.
     pub hide_text: bool,
+    /// The media keys are handled here and Windows shows nothing
+    /// (ADR-0020). Windows only.
+    pub replace_windows: bool,
 }
 
 impl Default for Settings {
@@ -33,6 +37,7 @@ impl Default for Settings {
         Self {
             scroll: true,
             hide_text: false,
+            replace_windows: false,
         }
     }
 }
@@ -118,8 +123,12 @@ struct Inner {
 
 impl Inner {
     /// A new state from the media thread.
-    fn changed(&self, track: Option<Track>) {
+    fn changed(self: &Arc<Self>, track: Option<Track>) {
         let previous = std::mem::replace(&mut *self.track.lock().unwrap(), track.clone());
+        // Something to control appeared or went away: the keys follow.
+        if previous.is_some() != track.is_some() {
+            self.capture_keys();
+        }
         let started = self.read_once.swap(true, Ordering::Relaxed);
         let Some(host) = self.host.get() else { return };
         host.refresh();
@@ -132,6 +141,33 @@ impl Inner {
         {
             host.spotlight(SPOTLIGHT);
         }
+    }
+
+    /// Takes the media keys over while asked to and something is there to
+    /// control; else Windows keeps them (ADR-0020).
+    fn capture_keys(self: &Arc<Self>) {
+        // One lock at a time (CLAUDE.md, Verrous).
+        let asked = self.settings.lock().unwrap().replace_windows;
+        let running = self.commands.lock().unwrap().is_some();
+        let playing = self.track.lock().unwrap().is_some();
+        let inner = Arc::clone(self);
+        platform::capture_keys(
+            KeyGroup::Media,
+            (asked && running && playing)
+                .then(|| -> platform::KeyHandler { Arc::new(move |key| inner.key(key)) }),
+        );
+    }
+
+    /// A media key taken over from Windows: exactly like the notch's buttons.
+    /// A new track shows briefly as always; play / pause only changes the
+    /// shown state (the faded cover). Called on the key hook's thread.
+    fn key(&self, key: Key) {
+        self.send(match key {
+            Key::PlayPause => Command::TogglePlayPause,
+            Key::Next => Command::Next,
+            Key::Previous => Command::Previous,
+            _ => return,
+        });
     }
 
     fn send(&self, command: Command) {
@@ -168,6 +204,7 @@ impl Module for Media {
             let commands = session::spawn(move |track| inner.changed(track));
             *self.inner.commands.lock().unwrap() = Some(commands);
         }
+        self.inner.capture_keys();
         if !self.inner.ticker_started.swap(true, Ordering::Relaxed) {
             spawn_ticker(Arc::clone(&self.inner));
         }
@@ -180,6 +217,7 @@ impl Module for Media {
         self.inner.send(Command::Stop);
         *self.inner.commands.lock().unwrap() = None;
         *self.inner.track.lock().unwrap() = None;
+        self.inner.capture_keys();
     }
 
     fn items(&self) -> Vec<Item> {
@@ -214,6 +252,7 @@ impl Module for Media {
         let settings: Settings =
             serde_json::from_value(args).map_err(|e| t!("settings.invalid", error = e))?;
         *self.inner.settings.lock().unwrap() = settings.clone();
+        self.inner.capture_keys();
         if let Some(host) = self.inner.host.get() {
             host.save_settings(&settings);
             host.settings_changed();
