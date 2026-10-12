@@ -29,6 +29,7 @@
   let {
     cards,
     start,
+    upwards,
     foldedWidth,
     duration,
     gap,
@@ -37,6 +38,8 @@
     moduleUis,
     notice,
     spotlight,
+    bubble,
+    bubbleWidth = $bindable(),
     ontextreadtime,
     edge,
     style,
@@ -56,6 +59,9 @@
     // Where the stack begins along the edge, from App.svelte (it also sets
     // the window region from the same numbers).
     start: number
+    // Left / right edges: the notch at the bottom of the stack, the other
+    // cards above it (no room below).
+    upwards: boolean
     // Width of the closed notch: the other cards open from it, like the notch.
     foldedWidth: number
     // Opening / closing animation, in ms.
@@ -69,6 +75,10 @@
     notice: string | null
     // A module showing its value for a moment, even when quiet (DF-0013).
     spotlight: string | null
+    // Left / right edges: the closed notch shows that value in a small
+    // horizontal bubble (DF-0027), as wide as `bubbleWidth`, measured here.
+    bubble: boolean
+    bubbleWidth?: number
     // How long a module's compact text needs to be read once (Marquee).
     ontextreadtime: (module: string, ms: number) => void
     edge: Edge
@@ -113,6 +123,14 @@
     return moduleUis[module]?.icon ?? Puzzle
   }
   const vertical = $derived(edge === 'left' || edge === 'right')
+  // Thin and vertical: the closed notch on the left / right edges, unless it
+  // is a bubble.
+  const thin = $derived(vertical && !expanded && !notice && !bubble)
+
+  let rowWidth = $state(0)
+  $effect(() => {
+    if (bubble && rowWidth > 0) bubbleWidth = Math.ceil(rowWidth) + 32
+  })
 
   // The cards are stacked: towards the inside of the screen on the top and
   // bottom edges, down along the edge on the left and right ones.
@@ -140,6 +158,10 @@
     }
   }
 
+  // The cards' offsets count from the stack's bottom: on the bottom edge, and
+  // upwards on the left / right ones.
+  const fromBottom = $derived(edge === 'bottom' || (vertical && upwards))
+
   const position = $derived(
     {
       top: `left: ${start}px; top: 0`,
@@ -162,6 +184,7 @@
 <div class="frame" style:--duration="{duration}ms">
   <div
     class="stack edge-{edge}"
+    class:upwards={vertical && upwards}
     class:movable
     role="presentation"
     style={position}
@@ -177,7 +200,7 @@
       role="button"
       tabindex="-1"
       class="notch"
-      class:vertical={vertical && !expanded && !notice}
+      class:vertical={thin}
       class:movable
       class:ringing={notchRinging}
       style:width="{notch.width}px"
@@ -199,9 +222,9 @@
         <span class="row compact"><span class="label">{notice}</span></span>
       {:else if expanded}
         <Sections list={notch.sections} {note} {moduleUis} {onaction} {onmenu} onpick={onclick} />
-      {:else if vertical}
-        <!-- Thin vertical notch: the shown module's dots, else its icon;
-             details on hover. -->
+      {:else if thin}
+        <!-- Thin vertical notch: the shown module's dots, else its picture
+             or icon; details on hover. -->
         {#if dotted.shown.length > 0}
           <span class="dots column">
             {#each dotted.shown as item (item.id)}
@@ -209,11 +232,22 @@
             {/each}
             {#if dotted.hidden > 0}<More count={dotted.hidden} />{/if}
           </span>
+        {:else if top && top.stack.length > 0}
+          <span class="stacked">
+            {#each top.stack as line, i (i)}<span>{line}</span>{/each}
+          </span>
+        {:else if top && top.image !== null && shown}
+          <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
         {:else if ShownIcon}
           <ModuleIcon icon={ShownIcon} item={top} {onaction} />
         {/if}
       {:else if top}
-        <span class="row compact">
+        <span
+          class="row compact"
+          class:bubble
+          class:slider={!!top.slider && !quiet}
+          bind:offsetWidth={rowWidth}
+        >
           {#if dotted.shown.length > 0}
             <span class="dots">
               {#each dotted.shown as item (item.id)}
@@ -226,13 +260,21 @@
             <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
           {:else if quiet && ShownIcon}
             <ModuleIcon icon={ShownIcon} item={top} {onaction} />
-          {:else}
-            {#if top.slider}
-              <!-- A slider's value as a small bar (e.g. the volume). -->
+          {:else if top.slider && ShownIcon}
+            <!-- A slider (the volume): its icon, its value as a bar across
+                 the notch, then as a number; no label nor title. Its compact
+                 text instead of the bar and number, if it has one (muted). -->
+            <ModuleIcon icon={ShownIcon} item={top} {onaction} />
+            {#if top.compact}
+              <!-- Faint, like a muted icon: discreet. -->
+              <span class="label muted">{top.compact.label}</span>
+            {:else}
               <span class="meter">
                 <span style:width="{sliderPercent(top.slider)}%"></span>
               </span>
+              <span class="value">{Math.round(top.slider.value)}</span>
             {/if}
+          {:else}
             {#if top.image !== null && shown}
               <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
             {/if}
@@ -245,7 +287,7 @@
               />
             {/if}
           {/if}
-          {#if compactTitle}<span class="muted">{compactTitle}</span>{/if}
+          {#if compactTitle && !top.slider}<span class="muted">{compactTitle}</span>{/if}
         </span>
       {/if}
     </div>
@@ -258,8 +300,8 @@
         tabindex="-1"
         class="notch card"
         class:ringing={ringing(card.sections)}
-        style:top={edge === 'bottom' ? null : `${offsets[i + 1]}px`}
-        style:bottom={edge === 'bottom' ? `${offsets[i + 1]}px` : null}
+        style:top={fromBottom ? null : `${offsets[i + 1]}px`}
+        style:bottom={fromBottom ? `${offsets[i + 1]}px` : null}
         style:width="{card.width}px"
         style:height="{card.height}px"
         style:border-radius="{card.radius}px"
@@ -334,6 +376,11 @@
     top: 0;
   }
 
+  .stack.upwards > .notch {
+    top: auto;
+    bottom: 0;
+  }
+
   .edge-top > .notch,
   .edge-bottom > .notch {
     left: 50%;
@@ -376,6 +423,11 @@
     justify-content: center;
   }
 
+  /* At its natural width, measured to size the bubble. */
+  .row.bubble {
+    width: max-content;
+  }
+
   .meter {
     flex-shrink: 0;
     width: 64px;
@@ -383,6 +435,25 @@
     overflow: hidden;
     border-radius: 2px;
     background: var(--notch-track);
+  }
+
+  /* A slider across most of the closed notch: the bar takes the room left. */
+  .row.slider:not(.bubble) {
+    width: 85%;
+    margin: 0 auto;
+    gap: 10px;
+  }
+
+  .row.slider:not(.bubble) .meter {
+    flex: 1;
+  }
+
+  /* Same width for every value, the bar does not jitter; against the right
+     end, so no gap after the number. */
+  .value {
+    min-width: 3ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 
   .meter > span {

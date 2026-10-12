@@ -104,6 +104,24 @@ pub fn format_as(
     }
 }
 
+/// The time as short lines, hours over minutes (then the seconds and AM /
+/// PM, if shown): the thin compact views of the left / right edges.
+pub fn stacked(now: NaiveDateTime, settings: &Settings) -> Vec<String> {
+    let mut lines = if settings.hour12 {
+        vec![now.hour12().1.to_string()]
+    } else {
+        vec![format!("{:02}", now.hour())]
+    };
+    lines.push(format!("{:02}", now.minute()));
+    if settings.seconds {
+        lines.push(format!("{:02}", now.second()));
+    }
+    if settings.hour12 {
+        lines.push(if now.hour12().0 { "PM" } else { "AM" }.into());
+    }
+    lines
+}
+
 fn time(now: NaiveDateTime, settings: &Settings) -> String {
     let seconds = if settings.seconds {
         format!(":{:02}", now.second())
@@ -180,6 +198,18 @@ mod tests {
             ..Settings::default()
         };
         assert_eq!(format_fr(now, &date), pair("lundi 5 octobre", ""));
+    }
+
+    #[test]
+    fn the_time_stacked() {
+        let now = at(2026, 10, 5, 14, 2, 7);
+        assert_eq!(stacked(now, &Settings::default()), ["14", "02"]);
+        let all = Settings {
+            hour12: true,
+            seconds: true,
+            ..Settings::default()
+        };
+        assert_eq!(stacked(now, &all), ["2", "02", "07", "PM"]);
     }
 
     #[test]

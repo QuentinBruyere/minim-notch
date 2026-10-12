@@ -264,6 +264,8 @@ fn items(countdown: &Countdown, settings: &Settings, now: Instant) -> Vec<Item> 
         // Not started: the compact views show the timer icon.
         quiet: phase == Phase::Idle,
         ringing: phase == Phase::Finished,
+        // In use: the time left (or "Time's up") in a bubble on the sides.
+        bubble: phase != Phase::Idle,
         // Closed notch and pin: the duration after "Time's up", fainter.
         compact: (phase == Phase::Finished).then(|| Compact {
             label: t!("timer.finished"),

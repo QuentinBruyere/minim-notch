@@ -156,6 +156,14 @@ pub struct Item {
     pub dimmed: bool,
     /// What it is busy with, if anything (DF-0024): music playing, running.
     pub activity: Option<Activity>,
+    /// Its compact text is worth seeing all along (a stopwatch or timer in
+    /// use): on the left / right edges, the thin compact views show it in a
+    /// small horizontal bubble, as for a spotlight (DF-0027).
+    pub bubble: bool,
+    /// Short lines shown one above the other in the thin compact views of
+    /// the left / right edges, instead of the icon: the clock's hours over
+    /// its minutes (DF-0027).
+    pub stack: Vec<String>,
     /// In the compact views, a text too long for its place scrolls instead
     /// of being cut (DF-0017).
     pub scroll: bool,

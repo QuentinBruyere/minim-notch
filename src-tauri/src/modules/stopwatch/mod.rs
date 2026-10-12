@@ -111,6 +111,8 @@ fn item(watch: &Watch, now: Instant) -> Item {
         // Never started: the compact views show the stopwatch icon.
         quiet: watch.idle(),
         activity: watch.running().then_some(Activity::Running),
+        // In use (running or paused): its time in a bubble on the sides.
+        bubble: !watch.idle(),
         ..Item::default()
     }
 }

@@ -8,7 +8,7 @@ mod endpoint;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::module::{Action, Host, Icon, Item, Module, Slider};
+use crate::module::{Action, Compact, Host, Icon, Item, Module, Slider};
 use crate::t;
 
 /// How long the closed notch shows a volume changed elsewhere.
@@ -164,6 +164,12 @@ fn item(level: Level) -> Item {
         }),
         // The level's icon is the mute button, wherever it shows.
         icon_action: Some(Action::icon("mute", icon, &tooltip)),
+        // Muted: the compact views say so instead of the level (the closed
+        // notch: instead of the bar and the number, DF-0027).
+        compact: level.muted.then(|| Compact {
+            label: t!("volume.muted"),
+            title: String::new(),
+        }),
         // The compact views show the icon, and the value only for a moment
         // after a change (`Host::spotlight`), like the stopwatch at rest.
         quiet: true,
@@ -193,6 +199,11 @@ mod tests {
             muted: true,
         });
         assert_eq!(off.label, "Muted");
+        assert_eq!(
+            off.compact.as_ref().map(|c| c.label.as_str()),
+            Some("Muted")
+        );
+        assert!(on.compact.is_none());
         assert_eq!(
             off.icon_action.as_ref().and_then(|a| a.icon),
             Some(Icon::Muted)

@@ -63,6 +63,12 @@ export interface Item {
   } | null
   // What it is busy with (DF-0024): music playing, something running.
   activity: 'music' | 'running' | null
+  // Its compact text is worth seeing all along (a stopwatch or timer in use):
+  // on the left / right edges, the thin views show it in a bubble (DF-0027).
+  bubble: boolean
+  // Short lines stacked in the thin views of the left / right edges, instead
+  // of the icon (the clock's hours over minutes, DF-0027).
+  stack: string[]
   actions: Action[]
   // A slider in the open notch, between the title and the label.
   slider: Slider | null

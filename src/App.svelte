@@ -9,8 +9,10 @@
   import {
     allItems,
     around,
+    compactSection,
     corners,
     moduleOf,
+    mostUrgent,
     newAlerts,
     ringing,
     soundFor,
@@ -102,9 +104,10 @@
   let alertModules = $state<Set<string>>(new Set())
   // The pin under the cursor, and the pins an alert opened (DF-0012).
   let pinHover = $state<string | null>(null)
-  // A module that just changed through the user elsewhere (the volume keys):
-  // the closed notch, or its pin, shows its value for a moment.
-  let spotlight = $state<string | null>(null)
+  // Modules that just changed through the user elsewhere (the volume keys, a
+  // new track): the closed notch, or their pins, show their value for a
+  // moment. Several at once each keep their own time; the last one is last.
+  let spotlights = $state<string[]>([])
   let pinAlerting = $state(false)
   let pinAlerts = $state<Set<string>>(new Set())
   // Closed width each pin needs, measured by Pin.svelte.
@@ -118,6 +121,10 @@
   const duration = $derived(speedMs[status.speed])
   // Pinned modules live in their own mini-notch, not in the notch (DF-0012).
   const notchSections = $derived(content.sections.filter((s) => !s.pin))
+  // The notch's latest spotlighted module (pinned ones have their own pin).
+  const spotlight = $derived(
+    spotlights.findLast((m) => notchSections.some((s) => s.module === m)) ?? null,
+  )
   // What the closed notch chooses from: the spotlighted module alone.
   const compactSections = $derived.by(() => {
     const shown = spotlight && notchSections.find((s) => s.module === spotlight)
@@ -134,6 +141,16 @@
     return alerted.length > 0 ? alerted : notchSections
   })
   const wideNotice = $derived(notice !== null && vertical)
+  // Left / right edges: a module showing its value for a moment, or whose
+  // item asks for it (a running stopwatch), turns its thin shape into a small
+  // horizontal bubble (DF-0027). The notch's, here; the pins' in `pinsAt`.
+  // Its width is measured by Notch.svelte / Pin.svelte.
+  const bubbles = (section: Section | undefined) =>
+    !!section && (spotlights.includes(section.module) || !!mostUrgent(section.items)?.bubble)
+  const notchBubble = $derived(
+    vertical && !expanded && !notice && bubbles(compactSection(compactSections)),
+  )
+  let notchBubbleWidth = $state<number | undefined>(undefined)
   // Separate layout: one card per module, once there are several to show.
   const separate = $derived(status.layout === 'separate' && visibleSections.length > 1)
 
@@ -167,6 +184,17 @@
 
   const cards = $derived.by<Card[]>(() => {
     const compact = compactShape(status.edge, status.style)
+    if (notchBubble) {
+      const width = Math.min(EXPANDED_WIDTH, notchBubbleWidth ?? PIN_MIN_WIDTH)
+      return [
+        {
+          width: Math.max(compact.width, width),
+          height: compact.width,
+          radius: compact.radius,
+          sections: [],
+        },
+      ]
+    }
     if (!expanded && !wideNotice) return [{ ...compact, sections: [] }]
     const groups = separate ? visibleSections.map((s) => [s]) : [visibleSections]
     const heights = groups.map((g) => (wideNotice ? 18 + ROW_HEIGHT : heightOf(g)))
@@ -187,24 +215,28 @@
   // --- Geometry: every shape in the window, drawn and made clickable ---
 
   // The cards are stacked from the attached side: towards the inside of the
-  // screen on the top and bottom edges, down along the edge on the left and
-  // right ones. The stack is centered on the anchor along the edge, then kept
-  // inside the window: at an end of the edge the notch opens towards the
-  // other end.
+  // screen on the top and bottom edges, along the edge on the left and right
+  // ones. On the top and bottom edges the stack is centered on the anchor.
+  // On the left and right ones the notch keeps the closed notch's place, like
+  // a popup: the stack goes down from its top when everything fits below,
+  // else up from its bottom, the other cards above it (`upwards`). Either way
+  // it is then kept inside the window.
   const stackWidth = $derived(Math.max(...cards.map((c) => c.width)))
   const stackHeight = $derived(
     cards.reduce((sum, c) => sum + c.height, 0) + CARD_GAP * (cards.length - 1),
   )
   const length = $derived(vertical ? windowHeight : windowWidth)
-  const baseStart = $derived.by(() => {
-    const size = vertical ? stackHeight : stackWidth
+  // Where the closed notch is along the edge.
+  const closedStart = $derived.by(() => {
+    const compact = compactShape(status.edge, status.style)
+    const size = vertical ? compact.height : compact.width
     const center = status.anchor ?? length / 2
     return Math.min(Math.max(center - size / 2, 0), Math.max(length - size, 0))
   })
-  function cardRectsAt(start: number): Rect[] {
+  function cardRectsAt(start: number, upwards: boolean): Rect[] {
     let offset = 0
     return cards.map((c) => {
-      const at = offset
+      const at = upwards ? stackHeight - offset - c.height : offset
       offset += c.height + CARD_GAP
       const centered = start + (stackWidth - c.width) / 2
       const corner = {
@@ -217,8 +249,8 @@
     })
   }
   // Pins (DF-0012): next to the notch, the first in display order closest to
-  // it; above and below it on the left / right edges. A pin opens outwards
-  // (away from the notch) and towards the inside of the screen.
+  // it; above and below the whole stack on the left / right edges. A pin
+  // opens outwards (away from the notch) and towards the inside of the screen.
   const pinned = $derived(content.sections.filter((s) => s.pin && s.items.length > 0))
   function pinOpen(module: string): boolean {
     // Some modules keep their pin small, hovered or not (the Companion).
@@ -229,35 +261,49 @@
       (pinHover === module || (pinAlerting && pinAlerts.has(module)))
     )
   }
-  function pinsAt(notch: Rect) {
+  function pinsAt(rects: Rect[]) {
     const compact = compactShape(status.edge, status.style)
+    const notch = rects[0]
     const placed: { section: Section; rect: Rect; open: boolean; radius: number }[] = []
     for (const side of ['right', 'left'] as const) {
       const after = side === 'right'
       let cursor = vertical
         ? after
-          ? notch.y + notch.height + PIN_GAP
-          : notch.y - PIN_GAP
+          ? Math.max(...rects.map((r) => r.y + r.height)) + PIN_GAP
+          : Math.min(...rects.map((r) => r.y)) - PIN_GAP
         : after
           ? notch.x + notch.width + PIN_GAP
           : notch.x - PIN_GAP
       for (const section of pinned.filter((s) => s.pin === side)) {
         const isOpen = pinOpen(section.module)
-        const closedLength = vertical
-          ? PIN_VERTICAL_LENGTH
-          : Math.max(PIN_MIN_WIDTH, pinWidths[section.module] ?? PIN_MIN_WIDTH)
+        const measured = Math.max(PIN_MIN_WIDTH, pinWidths[section.module] ?? PIN_MIN_WIDTH)
+        const closedLength = vertical ? PIN_VERTICAL_LENGTH : measured
         const thickness = vertical ? compact.width : compact.height
-        const width = isOpen ? PIN_OPEN_WIDTH : vertical ? thickness : closedLength
+        // A thin pin showing its value: a bubble as thick as a horizontal pin,
+        // centered on its place along the edge (DF-0027).
+        const bubble = vertical && !isOpen && bubbles(section)
+        const width = isOpen
+          ? PIN_OPEN_WIDTH
+          : bubble
+            ? Math.min(PIN_OPEN_WIDTH, measured)
+            : vertical
+              ? thickness
+              : closedLength
         const height = isOpen
           ? Math.max(vertical ? closedLength : thickness, heightOf([section]))
-          : vertical
+          : vertical && !bubble
             ? closedLength
             : thickness
-        const along = vertical ? height : width
+        const along = vertical ? (bubble ? closedLength : height) : width
         const at = after ? cursor : cursor - along
         cursor = after ? cursor + along + PIN_GAP : at - PIN_GAP
         const rect = vertical
-          ? { x: status.edge === 'left' ? 0 : windowWidth - width, y: at, width, height }
+          ? {
+              x: status.edge === 'left' ? 0 : windowWidth - width,
+              y: at + (along - height) / 2,
+              width,
+              height,
+            }
           : { x: at, y: status.edge === 'top' ? 0 : windowHeight - height, width, height }
         placed.push({
           section,
@@ -270,20 +316,45 @@
     return placed
   }
 
-  // The window spans the whole edge (`placement::window_size`). When the pins
-  // do not fit on a side (the notch pushed to an end), the whole group slides
+  // The window spans the whole edge (`placement::window_size`). When the
+  // shapes do not fit (the notch pushed to an end), the whole group slides
   // inwards just enough: nothing is ever cut.
-  const start = $derived.by(() => {
-    const rects = cardRectsAt(baseStart)
-    const all = [...rects, ...pinsAt(rects[0]).map((p) => p.rect)]
+  function layoutAt(start: number, upwards: boolean) {
+    const rects = cardRectsAt(start, upwards)
+    const placed = pinsAt(rects)
+    const all = [...rects, ...placed.map((p) => p.rect)]
     const begin = Math.min(...all.map((r) => (vertical ? r.y : r.x)))
     const end = Math.max(...all.map((r) => (vertical ? r.y + r.height : r.x + r.width)))
-    if (begin < 0 || end - begin > length) return baseStart - begin
-    if (end > length) return baseStart - (end - length)
-    return baseStart
+    return { start, upwards, rects, pins: placed, begin, end }
+  }
+  // The direction last used on the left / right edges: kept while the notch
+  // closes, so that it folds back the way it opened.
+  let lastUpwards = $state(false)
+  const layout = $derived.by(() => {
+    const center = status.anchor ?? length / 2
+    const candidates: [number, boolean][] = !vertical
+      ? [[center - stackWidth / 2, false]]
+      : !open
+        ? // Centered on the closed notch's place: the bubble is shorter.
+          [[closedStart + (compactShape(status.edge, status.style).height - stackHeight) / 2, lastUpwards]]
+        : [
+            [closedStart, false],
+            [closedStart + compactShape(status.edge, status.style).height - stackHeight, true],
+          ]
+    const layouts = candidates.map(([start, upwards]) => layoutAt(start, upwards))
+    const fitting = layouts.find((l) => l.begin >= 0 && l.end <= length)
+    if (fitting) return fitting
+    const { start, upwards, begin, end } = layouts[0]
+    if (begin < 0 || end - begin > length) return layoutAt(start - begin, upwards)
+    return layoutAt(start - (end - length), upwards)
   })
-  const cardRects = $derived(cardRectsAt(start))
-  const pins = $derived(pinsAt(cardRects[0]))
+  $effect(() => {
+    if (open) lastUpwards = layout.upwards
+  })
+  const start = $derived(layout.start)
+  const upwards = $derived(layout.upwards)
+  const cardRects = $derived(layout.rects)
+  const pins = $derived(layout.pins)
 
   // --- Auto-hide (DF-0018): tucked into the edge when unused ---
 
@@ -299,7 +370,7 @@
       pinHover !== null ||
       alerting ||
       pinAlerting ||
-      spotlight !== null ||
+      spotlights.length > 0 ||
       notice !== null ||
       ringing(content.sections),
   )
@@ -496,9 +567,9 @@
   }
 
   let alertTimer: ReturnType<typeof setTimeout> | undefined
-  let spotlightTimer: ReturnType<typeof setTimeout> | undefined
-  let spotlightSince = 0
-  let spotlightMs = 0
+  // Each spotlight's timer, start and length, by module.
+  const spotlightTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+  const spotlightTimes: Record<string, { since: number; ms: number }> = {}
   // When each module's compact text will have been read once, from its
   // Marquee's slide start (now if it fits). Kept for every module,
   // spotlighted or not: the new text may arrive just before or after the
@@ -506,15 +577,19 @@
   const readUntil: Record<string, number> = {}
   // A spotlight lasts its own time, or until its text has scrolled to its
   // end and faded out, if later (DF-0017).
-  function endSpotlight() {
-    if (spotlight === null) return
-    const end = Math.max(spotlightSince + spotlightMs, readUntil[spotlight] ?? 0)
-    clearTimeout(spotlightTimer)
-    spotlightTimer = setTimeout(() => (spotlight = null), Math.max(0, end - Date.now()))
+  function endSpotlight(module: string) {
+    const times = spotlightTimes[module]
+    if (!times) return
+    const end = Math.max(times.since + times.ms, readUntil[module] ?? 0)
+    clearTimeout(spotlightTimers[module])
+    spotlightTimers[module] = setTimeout(() => {
+      delete spotlightTimes[module]
+      spotlights = spotlights.filter((m) => m !== module)
+    }, Math.max(0, end - Date.now()))
   }
   function textReadTime(module: string, ms: number) {
     readUntil[module] = Date.now() + ms
-    if (spotlight === module) endSpotlight()
+    endSpotlight(module)
   }
   let pinAlertTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -595,10 +670,10 @@
       listen('pointer-left', pointerLeft),
       // A module shown for a moment in the closed notch (DF-0013, DF-0017).
       listen<{ module: string; ms: number }>('spotlight', (e) => {
-        spotlight = e.payload.module
-        spotlightSince = Date.now()
-        spotlightMs = e.payload.ms
-        endSpotlight()
+        const module = e.payload.module
+        spotlights = [...spotlights.filter((m) => m !== module), module]
+        spotlightTimes[module] = { since: Date.now(), ms: e.payload.ms }
+        endSpotlight(module)
       }),
       // The settings' opacity and grain sliders, live while they move;
       // saved on release, which brings them back through the status.
@@ -619,7 +694,7 @@
       clearTimeout(noticeTimer)
       clearTimeout(alertTimer)
       clearTimeout(pinAlertTimer)
-      clearTimeout(spotlightTimer)
+      for (const timer of Object.values(spotlightTimers)) clearTimeout(timer)
       clearTimeout(resizeTimer)
       unlisten.forEach((p) => p.then((off) => off()))
     }
@@ -651,6 +726,7 @@
 <Notch
   {cards}
   {start}
+  {upwards}
   foldedWidth={compactShape(status.edge, status.style).width}
   {duration}
   gap={CARD_GAP}
@@ -659,6 +735,8 @@
   {moduleUis}
   {notice}
   {spotlight}
+  bubble={notchBubble}
+  bind:bubbleWidth={notchBubbleWidth}
   ontextreadtime={textReadTime}
   edge={status.edge}
   style={status.style}
@@ -682,7 +760,7 @@
       rect={pin.rect}
       corners={corners(status.edge, pin.radius, attached)}
       open={pin.open}
-      spotlit={spotlight === pin.section.module}
+      spotlit={spotlights.includes(pin.section.module)}
       ontextreadtime={textReadTime}
       {vertical}
       {moduleUis}

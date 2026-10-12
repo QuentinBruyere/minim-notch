@@ -85,6 +85,13 @@ impl Module for Clock {
                 label: compact_label,
                 title: compact_title,
             }),
+            // The time only: on the sides, hours over minutes instead of the
+            // icon (DF-0027).
+            stack: if settings.compact == format::Show::Time {
+                format::stacked(now, &settings)
+            } else {
+                Vec::new()
+            },
             ..Item::default()
         }]
     }

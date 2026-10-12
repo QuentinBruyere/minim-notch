@@ -114,6 +114,16 @@ html[data-window='notch'] {
     flex-shrink: 0;
   }
 
+  /* Short lines one above the other in a thin shape (the clock's hours
+     over minutes, DF-0027). */
+  & .stacked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
   & .dots.column {
     flex-direction: column;
     gap: 6px;

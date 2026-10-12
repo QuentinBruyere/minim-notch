@@ -78,9 +78,15 @@
     top?.icon ? icons[top.icon] : (moduleUis[section.module]?.icon ?? Puzzle),
   )
 
+  // Thin on the left / right edges, unless it shows its value for a moment,
+  // or its item asks for it (a running stopwatch): then a small horizontal
+  // bubble (DF-0027).
+  const bubble = $derived(vertical && (spotlit || !!top?.bubble) && !open)
+  const thin = $derived(vertical && !open && !bubble)
+
   let summaryWidth = $state(0)
   $effect(() => {
-    if (!open && !vertical && summaryWidth > 0) {
+    if (!open && !thin && summaryWidth > 0) {
       measured = Math.ceil(summaryWidth) + 2 * PIN_PADDING
     }
   })
@@ -92,7 +98,7 @@
   tabindex="-1"
   class="pin"
   class:open
-  class:vertical={vertical && !open}
+  class:vertical={thin}
   class:after-notch={section.pin === 'right'}
   class:before-notch={section.pin === 'left'}
   class:ringing={ringing([section])}
@@ -101,7 +107,7 @@
   style:width="{rect.width}px"
   style:height="{rect.height}px"
   style:border-radius={corners}
-  style:padding={vertical && !open ? '0' : `0 ${open ? 16 : PIN_PADDING}px`}
+  style:padding={thin ? '0' : `0 ${open ? 16 : PIN_PADDING}px`}
   onmouseenter={onenter}
   onmouseleave={onleave}
   onclick={(e) =>
@@ -116,7 +122,7 @@
 >
   {#if open}
     <Sections list={[section]} height={rect.height} {moduleUis} {onaction} />
-  {:else if vertical}
+  {:else if thin}
     {#if dotted.shown.length > 0}
       <span class="dots column">
         {#each dotted.shown as item (item.id)}
@@ -124,6 +130,12 @@
         {/each}
         {#if dotted.hidden > 0}<More count={dotted.hidden} />{/if}
       </span>
+    {:else if top && top.stack.length > 0}
+      <span class="stacked">
+        {#each top.stack as line, i (i)}<span>{line}</span>{/each}
+      </span>
+    {:else if top && top.image !== null}
+      <Cover src={top.image} icon={moduleUis[section.module]?.icon ?? Puzzle} dimmed={top.dimmed} />
     {:else}
       <ModuleIcon icon={Icon} item={top} {onaction} />
     {/if}
@@ -144,6 +156,15 @@
           <Cover src={top.image} icon={moduleUis[section.module]?.icon ?? Puzzle} dimmed={top.dimmed} />
         {:else if quiet}
           <ModuleIcon icon={Icon} item={top} {onaction} />
+        {:else if top.slider}
+          <!-- A slider (the volume): its icon, then its value as a number;
+               its compact text instead, faint, if it has one (muted). -->
+          <ModuleIcon icon={Icon} item={top} {onaction} />
+          {#if top.compact}
+            <span class="label muted">{top.compact.label}</span>
+          {:else}
+            <span class="value">{Math.round(top.slider.value)}</span>
+          {/if}
         {:else}
           {#if top.image !== null}
             <Cover src={top.image} icon={moduleUis[section.module]?.icon ?? Puzzle} dimmed={top.dimmed} />
@@ -180,20 +201,21 @@
       border-radius var(--duration) ease;
   }
 
-  /* Closed, its summary or icon is centered. Beside the notch, its box
-     keeps to the side by the notch, the one that stays still while the pin
-     opens and closes. */
+  /* Closed, its summary or icon is centered. Beside the notch (top and
+     bottom edges), its box keeps to the side by the notch, the one that
+     stays still while the pin opens and closes; a thin pin (left and right
+     edges) keeps its icon centered. */
   .pin:not(.open) {
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .pin.after-notch:not(.open) {
+  .pin.after-notch:not(.open, .vertical) {
     justify-content: flex-start;
   }
 
-  .pin.before-notch:not(.open) {
+  .pin.before-notch:not(.open, .vertical) {
     justify-content: flex-end;
   }
 
@@ -212,6 +234,11 @@
     width: max-content;
     height: 100%;
     white-space: nowrap;
+  }
+
+  /* Digits of equal width: the pin does not jitter while the value moves. */
+  .value {
+    font-variant-numeric: tabular-nums;
   }
 
   /* A long text (a song title) stops the pin from growing too wide. */
