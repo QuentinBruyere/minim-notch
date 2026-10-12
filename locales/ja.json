@@ -245,6 +245,8 @@
   "settings.pin_side.left": "左",
   "settings.pin_side.right": "右",
   "settings.pixels": "{value} px",
+  "settings.pin_flares": "ピン留めの裾を広げる",
+  "settings.pin_flares.hint": "ノッチと同じように、各ピン留めが画面の端と接する部分を小さなカーブで広げます。",
   "settings.recenter": "中央に戻す",
   "settings.resistance": "ノッチの縁での抵抗",
   "settings.resistance.hint": "カーソルがノッチの縁で止まります。押し込むと中に入れます。",

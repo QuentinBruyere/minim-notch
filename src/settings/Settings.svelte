@@ -43,6 +43,7 @@
     notchSpeed: NotchSpeed
     appearance: Appearance
     autoHide: boolean
+    pinFlares: boolean
     autoHideDelayMs: number
     notchColor: string | null
     notchOpacity: number
@@ -662,6 +663,20 @@
                 step="1"
                 bind:value={gap}
                 onchange={() => run('set_gap', { gap })}
+              />
+            </label>
+          {:else}
+            <!-- Attached: pins can curve outwards like the notch (DF-0028). -->
+            <label class="row separated">
+              <div>
+                <div class="label">{t('settings.pin_flares')}</div>
+                <div class="hint">{t('settings.pin_flares.hint')}</div>
+              </div>
+              <input
+                type="checkbox"
+                class="switch"
+                checked={settings.pinFlares}
+                onchange={(e) => run('set_pin_flares', { enabled: e.currentTarget.checked })}
               />
             </label>
           {/if}

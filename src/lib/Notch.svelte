@@ -17,6 +17,7 @@
     MAX_COMPACT_COMPANIONS,
     MAX_VERTICAL_COMPANIONS,
     corners,
+    flareStyles,
     mostUrgent,
     ringing,
     sliderPercent,
@@ -38,6 +39,7 @@
     moduleUis,
     notice,
     spotlight,
+    flare,
     bubble,
     bubbleWidth = $bindable(),
     ontextreadtime,
@@ -75,6 +77,9 @@
     notice: string | null
     // A module showing its value for a moment, even when quiet (DF-0013).
     spotlight: string | null
+    // Radius of its outward curves where it meets the edge (DF-0028), 0 for
+    // none.
+    flare: number
     // Left / right edges: the closed notch shows that value in a small
     // horizontal bubble (DF-0027), as wide as `bubbleWidth`, measured here.
     bubble: boolean
@@ -144,8 +149,21 @@
   const offsets = $derived(
     cards.map((_, i) => cards.slice(0, i).reduce((sum, c) => sum + c.height + gap, 0)),
   )
+  // Each card starts unfolding a little after the one before. The last one
+  // starts STAGGER of the duration after the notch with two cards, and the
+  // number of steps to the power STAGGER_GROWTH times that with more: a
+  // longer list unfolds quicker, step by step, like Apple's lists (DF-0029).
+  const STAGGER = 0.28
+  const STAGGER_GROWTH = 0.7
+  const stagger = $derived.by(() => {
+    const steps = cards.length - 1
+    const last = duration * STAGGER * steps ** STAGGER_GROWTH
+    return steps > 0 ? last / steps : 0
+  })
+
   // A card opens like the notch: from the closed notch's width and from
-  // nothing in height, in its place (from the attached side).
+  // nothing in height, in its place (from the attached side), fading in so
+  // that the cards are seen arriving one after the other.
   function unfold(node: HTMLElement, { delay, from }: { delay: number; from: number }) {
     const width = node.offsetWidth
     const height = node.offsetHeight
@@ -154,7 +172,7 @@
       duration,
       easing: cubicOut,
       css: (t: number) =>
-        `overflow: hidden; width: ${from + (width - from) * t}px; height: ${height * t}px`,
+        `overflow: hidden; width: ${from + (width - from) * t}px; height: ${height * t}px; opacity: ${t}`,
     }
   }
 
@@ -172,6 +190,15 @@
   )
 
   const notchCorners = $derived(corners(edge, notch.radius, style === 'notch'))
+  // The notch's outward curves (DF-0028), placed in the stack: it moves and
+  // grows with the notch. On the left / right edges with other cards along
+  // the edge, only the one away from them.
+  const flares = $derived.by(() => {
+    if (flare <= 0) return []
+    const both = flareStyles(edge, flare)
+    if (!vertical || cards.length === 1) return both
+    return upwards ? [both[1]] : [both[0]]
+  })
   // A ringing module pulses the shape that shows it (DF-0009).
   const notchRinging = $derived(
     expanded ? ringing(notch.sections) : !!shown && ringing([shown]),
@@ -193,6 +220,7 @@
     onmouseenter={onenter}
     onmouseleave={onleave}
   >
+    {#each flares as style, i (i)}<span class="flare" {style}></span>{/each}
     <!-- Not a <button>: it holds the items' buttons. The window never takes
          the keyboard focus, so there is no keyboard access to provide. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -311,7 +339,7 @@
         style:width="{card.width}px"
         style:height="{card.height}px"
         style:border-radius="{card.radius}px"
-        in:unfold={{ delay: Math.round(duration * 0.28) * (i + 1), from: foldedWidth }}
+        in:unfold={{ delay: Math.round(stagger * (i + 1)), from: foldedWidth }}
         out:fade={{ duration: Math.round(duration / 2) }}
       >
         <Sections

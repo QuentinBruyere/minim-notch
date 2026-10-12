@@ -15,6 +15,8 @@
     MAX_VERTICAL_COMPANIONS,
     mostUrgent,
     ringing,
+    flareStyles,
+    type Edge,
     type Rect,
     type Section,
   } from './content'
@@ -30,6 +32,8 @@
     corners,
     open,
     spotlit,
+    edge,
+    flare,
     ontextreadtime,
     vertical,
     moduleUis,
@@ -47,6 +51,10 @@
     open: boolean
     // Just changed (the volume keys): its value for a moment, even when quiet.
     spotlit: boolean
+    // The screen edge, and the radius of its outward curves there (DF-0028),
+    // 0 for none.
+    edge: Edge
+    flare: number
     // How long its compact text needs to be read once (Marquee).
     ontextreadtime: (module: string, ms: number) => void
     // On the left / right edges of the screen: thin, dots or icon only.
@@ -92,6 +100,17 @@
   })
 </script>
 
+<!-- The pin's place: its curves go with it, outside the clipped pin. -->
+<div
+  class="pin-slot"
+  style:left="{rect.x}px"
+  style:top="{rect.y}px"
+  style:width="{rect.width}px"
+  style:height="{rect.height}px"
+>
+{#if flare > 0}
+  {#each flareStyles(edge, flare) as style, i (i)}<span class="flare" {style}></span>{/each}
+{/if}
 <!-- Not a <button>: it holds the items' buttons once open. -->
 <div
   role="button"
@@ -102,10 +121,6 @@
   class:after-notch={section.pin === 'right'}
   class:before-notch={section.pin === 'left'}
   class:ringing={ringing([section])}
-  style:left="{rect.x}px"
-  style:top="{rect.y}px"
-  style:width="{rect.width}px"
-  style:height="{rect.height}px"
   style:border-radius={corners}
   style:padding={thin ? '0' : `0 ${open ? 16 : PIN_PADDING}px`}
   onmouseenter={onenter}
@@ -183,10 +198,22 @@
     </span>
   {/if}
 </div>
+</div>
 
 <style>
+  .pin-slot {
+    position: absolute;
+    pointer-events: none;
+    transition:
+      left var(--duration) ease,
+      top var(--duration) ease,
+      width var(--duration) ease,
+      height var(--duration) ease;
+  }
+
   .pin {
     position: absolute;
+    inset: 0;
     box-sizing: border-box;
     overflow: hidden;
     pointer-events: auto;
@@ -194,10 +221,6 @@
     outline: 1px solid var(--notch-border);
     outline-offset: -1px;
     transition:
-      left var(--duration) ease,
-      top var(--duration) ease,
-      width var(--duration) ease,
-      height var(--duration) ease,
       border-radius var(--duration) ease;
   }
 

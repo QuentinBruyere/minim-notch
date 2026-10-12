@@ -245,6 +245,8 @@
   "settings.pin_side.left": "Gauche",
   "settings.pin_side.right": "Droite",
   "settings.pixels": "{value} px",
+  "settings.pin_flares": "Épingles évasées",
+  "settings.pin_flares.hint": "Comme le notch, chaque épingle s'évase en petite courbe là où elle touche le bord de l'écran.",
   "settings.recenter": "Recentrer",
   "settings.resistance": "Résistance au bord du notch",
   "settings.resistance.hint": "Le curseur bute contre le notch : il faut pousser pour entrer.",

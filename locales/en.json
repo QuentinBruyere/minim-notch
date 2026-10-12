@@ -245,6 +245,8 @@
   "settings.pin_side.left": "Left",
   "settings.pin_side.right": "Right",
   "settings.pixels": "{value} px",
+  "settings.pin_flares": "Curved pins",
+  "settings.pin_flares.hint": "Like the notch, each pin flares out in a small curve where it meets the edge of the screen.",
   "settings.recenter": "Center",
   "settings.resistance": "Resistance at the notch edge",
   "settings.resistance.hint": "The cursor stops against the notch: push to enter.",

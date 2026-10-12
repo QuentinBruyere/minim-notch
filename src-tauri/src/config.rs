@@ -45,6 +45,8 @@ pub struct Config {
     pub language: Option<String>,
     /// Tucks the notch and its pins into the edge when unused (DF-0018).
     pub auto_hide: bool,
+    /// Pins curve outwards where they meet the edge, like the notch (DF-0028).
+    pub pin_flares: bool,
     /// How long after the cursor left before it tucks, in ms (0 to 5000).
     pub auto_hide_delay_ms: u32,
     /// The notch's own color, `#rrggbb` (DF-0019); `None` = the theme's.
@@ -142,6 +144,7 @@ impl Default for Config {
             appearance: Appearance::default(),
             language: None,
             auto_hide: false,
+            pin_flares: true,
             auto_hide_delay_ms: 1000,
             notch_color: None,
             notch_opacity: 100,

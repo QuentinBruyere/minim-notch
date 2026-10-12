@@ -245,6 +245,8 @@
   "settings.pin_side.left": "Links",
   "settings.pin_side.right": "Rechts",
   "settings.pixels": "{value} px",
+  "settings.pin_flares": "Geschwungene angeheftete Module",
+  "settings.pin_flares.hint": "Wie der Notch läuft jedes angeheftete Modul dort, wo es den Bildschirmrand berührt, in einer kleinen Kurve aus.",
   "settings.recenter": "Zentrieren",
   "settings.resistance": "Widerstand am Rand des Notch",
   "settings.resistance.hint": "Der Mauszeiger stößt gegen den Notch: Zum Eintreten muss man drücken.",

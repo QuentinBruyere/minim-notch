@@ -68,6 +68,7 @@ pub struct Settings {
     appearance: crate::config::Appearance,
     auto_hide: bool,
     auto_hide_delay_ms: u32,
+    pin_flares: bool,
     notch_color: Option<String>,
     notch_opacity: u8,
     notch_grain: u8,
@@ -129,6 +130,7 @@ pub fn current(app: &AppHandle) -> Settings {
         appearance: config.appearance,
         auto_hide: config.auto_hide,
         auto_hide_delay_ms: config.auto_hide_delay_ms,
+        pin_flares: config.pin_flares,
         notch_color: config.notch_color.clone(),
         notch_opacity: config.notch_opacity,
         notch_grain: config.notch_grain,
@@ -452,6 +454,13 @@ pub fn set_appearance(app: AppHandle, appearance: crate::config::Appearance) {
 #[tauri::command]
 pub fn set_auto_hide(app: AppHandle, enabled: bool) {
     update_config(&app, |c| c.auto_hide = enabled);
+    changed(&app);
+}
+
+/// Pins curve outwards where they meet the edge, like the notch (DF-0028).
+#[tauri::command]
+pub fn set_pin_flares(app: AppHandle, enabled: bool) {
+    update_config(&app, |c| c.pin_flares = enabled);
     changed(&app);
 }
 

@@ -15,7 +15,7 @@
         "label": "notch",
         "title": "Minim Notch",
         "width": 1100,
-        "height": 300,
+        "height": 600,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,

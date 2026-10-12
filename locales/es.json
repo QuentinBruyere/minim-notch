@@ -245,6 +245,8 @@
   "settings.pin_side.left": "Izquierda",
   "settings.pin_side.right": "Derecha",
   "settings.pixels": "{value} px",
+  "settings.pin_flares": "Anclados curvados",
+  "settings.pin_flares.hint": "Como el notch, cada anclado se abre en una pequeña curva donde toca el borde de la pantalla.",
   "settings.recenter": "Centrar",
   "settings.resistance": "Resistencia en el borde del notch",
   "settings.resistance.hint": "El cursor se detiene contra el notch: hay que empujar para entrar.",

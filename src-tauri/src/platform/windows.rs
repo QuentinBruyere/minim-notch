@@ -5,9 +5,9 @@ use tauri::WebviewWindow;
 use crate::placement::Edge;
 use windows_sys::Win32::Foundation::{HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
-    CombineRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject, GetMonitorInfoW, HRGN,
-    MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO, MonitorFromPoint,
-    MonitorFromWindow, RGN_OR, SetWindowRgn,
+    CombineRgn, CreateEllipticRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject,
+    GetMonitorInfoW, HRGN, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO,
+    MonitorFromPoint, MonitorFromWindow, RGN_DIFF, RGN_OR, SetWindowRgn,
 };
 use windows_sys::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
@@ -290,8 +290,41 @@ fn card_region(edge: Edge, shape: &super::Shape) -> HRGN {
             let square = CreateRectRgn(sx, sy, sx + sw, sy + sh);
             CombineRgn(region, region, square, RGN_OR);
             DeleteObject(square);
+            if shape.flare > 0 {
+                for (left, top, cx, cy) in flare_squares(edge, shape) {
+                    let r = shape.flare;
+                    let square = CreateRectRgn(left, top, left + r, top + r);
+                    // The hole a little smaller: the curve's anti-aliased
+                    // edge stays inside the region.
+                    let h = (r - AA_MARGIN).max(0);
+                    let hole = CreateEllipticRgn(cx - h, cy - h, cx + h + 1, cy + h + 1);
+                    CombineRgn(square, square, hole, RGN_DIFF);
+                    CombineRgn(region, region, square, RGN_OR);
+                    DeleteObject(hole);
+                    DeleteObject(square);
+                }
+            }
         }
         region
+    }
+}
+
+/// The two squares of an attached shape's outward curves (DF-0028), on both
+/// sides of it against the edge: their top-left corner and the center of the
+/// circle cut out of each, at the corner away from the edge and the shape.
+fn flare_squares(edge: Edge, shape: &super::Shape) -> [(i32, i32, i32, i32); 2] {
+    let (x, y, w, h, r) = (shape.x, shape.y, shape.width, shape.height, shape.flare);
+    match edge {
+        Edge::Top => [(x - r, y, x - r, y + r), (x + w, y, x + w + r, y + r)],
+        Edge::Bottom => [
+            (x - r, y + h - r, x - r, y + h - r),
+            (x + w, y + h - r, x + w + r, y + h - r),
+        ],
+        Edge::Left => [(x, y - r, x + r, y - r), (x, y + h, x + r, y + h + r)],
+        Edge::Right => [
+            (x + w - r, y - r, x + w - r, y - r),
+            (x + w - r, y + h, x + w - r, y + h + r),
+        ],
     }
 }
 

@@ -59,6 +59,8 @@ pub struct Status {
     /// Tucks into the edge when unused, and after how long (DF-0018).
     auto_hide: bool,
     auto_hide_delay_ms: u32,
+    /// Pins curve outwards where they meet the edge (DF-0028).
+    pin_flares: bool,
     /// The notch's own color (DF-0019); `None` = the theme's.
     notch_color: Option<String>,
     notch_opacity: u8,
@@ -170,6 +172,7 @@ fn status(state: &AppState) -> Status {
         language: i18n::language(),
         auto_hide: config.auto_hide,
         auto_hide_delay_ms: config.auto_hide_delay_ms,
+        pin_flares: config.pin_flares,
         notch_color: config.notch_color.clone(),
         notch_opacity: config.notch_opacity,
         notch_grain: config.notch_grain,
@@ -246,6 +249,7 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
             settings::set_appearance,
             settings::set_language,
             settings::set_auto_hide,
+            settings::set_pin_flares,
             settings::set_auto_hide_delay,
             settings::set_notch_color,
             settings::set_notch_opacity,

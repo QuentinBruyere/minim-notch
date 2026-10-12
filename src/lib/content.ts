@@ -130,6 +130,33 @@ export interface Shape extends Rect {
   radius: number
   // Glued to the screen edge: square corners on that side.
   attached: boolean
+  // Radius of the outward curves where it meets the edge (DF-0028); 0: none.
+  flare: number
+}
+
+// Where an attached shape's two outward curves go (DF-0028), as inline
+// styles for `.flare` elements inside its box: a small square on each side
+// against the edge, the circle cut out at its corner away from both.
+export function flareStyles(edge: Edge, r: number): string[] {
+  const spots: Record<Edge, [string, string][]> = {
+    top: [
+      [`left: -${r}px; top: 0`, '0 100%'],
+      [`right: -${r}px; top: 0`, '100% 100%'],
+    ],
+    bottom: [
+      [`left: -${r}px; bottom: 0`, '0 0'],
+      [`right: -${r}px; bottom: 0`, '100% 0'],
+    ],
+    left: [
+      [`left: 0; top: -${r}px`, '100% 0'],
+      [`left: 0; bottom: -${r}px`, '100% 100%'],
+    ],
+    right: [
+      [`right: 0; top: -${r}px`, '0 0'],
+      [`right: 0; bottom: -${r}px`, '0 100%'],
+    ],
+  }
+  return spots[edge].map(([place, at]) => `${place}; width: ${r}px; height: ${r}px; --r: ${r}px; --at: ${at}`)
 }
 
 // The box around two places of a moving shape: every place in between too.
@@ -144,6 +171,7 @@ export function around(a: Shape, b: Shape): Shape {
     height: Math.max(a.y + a.height, b.y + b.height) - y,
     radius: Math.min(a.radius, b.radius),
     attached: a.attached && b.attached,
+    flare: Math.max(a.flare, b.flare),
   }
 }
 
@@ -207,6 +235,8 @@ export interface Status {
   language: string
   // Tucks into the edge when unused, and after how long (DF-0018).
   autoHide: boolean
+  // Pins curve outwards where they meet the edge, like the notch (DF-0028).
+  pinFlares: boolean
   autoHideDelayMs: number
   // The notch's own color, #rrggbb (DF-0019); null = the theme's.
   notchColor: string | null

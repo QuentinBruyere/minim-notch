@@ -114,6 +114,23 @@ html[data-window='notch'] {
     flex-shrink: 0;
   }
 
+  /* An outward curve where an attached shape meets the edge (DF-0028),
+     placed by `flareStyles`: filled from the cut circle's edge outwards, the
+     notch's thin border (light theme) following the curve over the fill. */
+  & .flare {
+    position: absolute;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        circle at var(--at),
+        transparent calc(var(--r) - 0.5px),
+        var(--notch-border) var(--r),
+        var(--notch-border) calc(var(--r) + 0.5px),
+        transparent calc(var(--r) + 1px)
+      ),
+      radial-gradient(circle at var(--at), transparent calc(var(--r) - 0.5px), var(--notch-fill) var(--r));
+  }
+
   /* Short lines one above the other in a thin shape (the clock's hours
      over minutes, DF-0027). */
   & .stacked {

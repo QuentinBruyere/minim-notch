@@ -11,6 +11,9 @@ pub struct Shape {
     pub height: i32,
     pub radius: i32,
     pub detached: bool,
+    /// Radius of the outward curves on both sides where an attached shape
+    /// meets the screen edge (DF-0028); 0 for none.
+    pub flare: i32,
 }
 
 /// A volume or media key that a module can take over from Windows, which

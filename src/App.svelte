@@ -53,8 +53,9 @@
   // Added by the line between two modules (`.section + .section` in Sections.svelte).
   const SEPARATOR_HEIGHT = 15
   // Depth of the window on the top / bottom edges (`WINDOW_DEPTH` in
-  // src-tauri/src/notch.rs): past it, the open notch scrolls.
-  const MAX_HEIGHT = 300
+  // src-tauri/src/notch.rs), until the window's own size is known: past
+  // it, the open notch scrolls.
+  const MAX_HEIGHT = 600
   // Separate layout (DF-0011): space between two cards, corners of the
   // extra cards.
   const CARD_GAP = 8
@@ -67,6 +68,10 @@
   const PIN_MIN_WIDTH = 44
   const PIN_OPEN_WIDTH = 280
   const PIN_VERTICAL_LENGTH = 56
+  // Radius of the outward curves where an attached notch or pin meets the
+  // screen edge, like a MacBook's notch (DF-0028). `FLARE` in
+  // src-tauri/src/notch.rs too (used before the first report).
+  const FLARE = 6
   const ALERT_MS = 4000
   // Tucked into the edge (DF-0018): what stays visible of each shape, and of
   // the band along the edge that brings them all out.
@@ -87,6 +92,7 @@
     appearance: 'system',
     language: 'en',
     autoHide: false,
+    pinFlares: true,
     autoHideDelayMs: 1000,
     notchColor: null,
     notchOpacity: 100,
@@ -117,6 +123,12 @@
 
   const vertical = $derived(status.edge === 'left' || status.edge === 'right')
   const attached = $derived(status.style === 'notch')
+  // Attached shapes curve outwards on both sides (DF-0028), pins if asked:
+  // shapes keep clear of their neighbours' curves.
+  const flare = $derived(attached ? FLARE : 0)
+  const pinFlare = $derived(attached && status.pinFlares ? FLARE : 0)
+  const notchPinGap = $derived(PIN_GAP + flare + pinFlare)
+  const pinGap = $derived(PIN_GAP + 2 * pinFlare)
   // The opening / closing animation, set in the settings.
   const duration = $derived(speedMs[status.speed])
   // Pinned modules live in their own mini-notch, not in the notch (DF-0012).
@@ -202,7 +214,9 @@
     // vertical notch (120 px tall) would otherwise shrink to one row (44 px)
     // and leave the cursor outside, closing it as soon as its ends are hovered.
     heights[0] = Math.max(compact.height, heights[0])
-    fit(heights, MAX_HEIGHT - CARD_GAP * (groups.length - 1))
+    // The room along the stack: the window's depth on the top / bottom
+    // edges, its whole height on the left / right ones.
+    fit(heights, (windowHeight || MAX_HEIGHT) - CARD_GAP * (groups.length - 1))
     return groups.map((sections, i) => ({
       width: EXPANDED_WIDTH,
       height: heights[i],
@@ -269,11 +283,11 @@
       const after = side === 'right'
       let cursor = vertical
         ? after
-          ? Math.max(...rects.map((r) => r.y + r.height)) + PIN_GAP
-          : Math.min(...rects.map((r) => r.y)) - PIN_GAP
+          ? Math.max(...rects.map((r) => r.y + r.height)) + notchPinGap
+          : Math.min(...rects.map((r) => r.y)) - notchPinGap
         : after
-          ? notch.x + notch.width + PIN_GAP
-          : notch.x - PIN_GAP
+          ? notch.x + notch.width + notchPinGap
+          : notch.x - notchPinGap
       for (const section of pinned.filter((s) => s.pin === side)) {
         const isOpen = pinOpen(section.module)
         const measured = Math.max(PIN_MIN_WIDTH, pinWidths[section.module] ?? PIN_MIN_WIDTH)
@@ -296,7 +310,7 @@
             : thickness
         const along = vertical ? (bubble ? closedLength : height) : width
         const at = after ? cursor : cursor - along
-        cursor = after ? cursor + along + PIN_GAP : at - PIN_GAP
+        cursor = after ? cursor + along + pinGap : at - pinGap
         const rect = vertical
           ? {
               x: status.edge === 'left' ? 0 : windowWidth - width,
@@ -438,21 +452,29 @@
   // then the other cards, the gaps between them and the pins. Each has a key,
   // to follow it while it moves.
   const shapes = $derived.by<(Shape & { key: string })[]>(() => [
-    { key: 'notch', ...tuckRect(cardRects[0]), radius: cards[0].radius, attached },
+    { key: 'notch', ...tuckRect(cardRects[0]), radius: cards[0].radius, attached, flare },
     ...cardRects.slice(1).map((r, i) => ({
       key: `card:${i + 1}`,
       ...tuckRect(r),
       radius: cards[i + 1].radius,
       attached: false,
+      flare: 0,
     })),
-    ...gapRects.map((r, i) => ({ key: `gap:${i}`, ...tuckRect(r), radius: 0, attached: false })),
+    ...gapRects.map((r, i) => ({
+      key: `gap:${i}`,
+      ...tuckRect(r),
+      radius: 0,
+      attached: false,
+      flare: 0,
+    })),
     ...pins.map((p) => ({
       key: `pin:${p.section.module}`,
       ...tuckRect(p.rect),
       radius: p.radius,
       attached,
+      flare: pinFlare,
     })),
-    ...(band ? [{ key: 'band', ...band, radius: 0, attached: false }] : []),
+    ...(band ? [{ key: 'band', ...band, radius: 0, attached: false, flare: 0 }] : []),
   ])
   // As a string: the shapes are rebuilt whenever a module redraws (every
   // second for a running stopwatch), the region only changes with this.
@@ -735,6 +757,7 @@
   {moduleUis}
   {notice}
   {spotlight}
+  {flare}
   bubble={notchBubble}
   bind:bubbleWidth={notchBubbleWidth}
   ontextreadtime={textReadTime}
@@ -761,6 +784,8 @@
       corners={corners(status.edge, pin.radius, attached)}
       open={pin.open}
       spotlit={spotlights.includes(pin.section.module)}
+      edge={status.edge}
+      flare={pinFlare}
       ontextreadtime={textReadTime}
       {vertical}
       {moduleUis}
@@ -801,7 +826,7 @@
   }
 
   /* Move mode: pins follow the notch at once, like it. */
-  .pins.movable :global(.pin) {
+  .pins.movable :global(.pin-slot) {
     transition: none;
   }
 </style>

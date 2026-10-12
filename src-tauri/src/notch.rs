@@ -28,7 +28,14 @@ pub struct Shape {
     pub radius: f64,
     /// Glued to the screen edge: square corners on that side.
     pub attached: bool,
+    /// Outward curves where it meets the edge (DF-0028); 0 for none.
+    #[serde(default)]
+    pub flare: f64,
 }
+
+/// Radius of the outward curves of the attached notch (DF-0028): `FLARE` in
+/// src/App.svelte, used here until the front reports its shapes.
+const FLARE: f64 = 6.0;
 
 /// Visible shapes, the notch first. `None` until the front reports them:
 /// the compact notch of the current edge is used meanwhile.
@@ -37,8 +44,9 @@ static HIT_AREA: Mutex<Option<Vec<Shape>>> = Mutex::new(None);
 /// Depth of the notch window towards the inside of the screen, in logical
 /// pixels: the tallest open notch on the top / bottom edges (`MAX_HEIGHT` in
 /// src/App.svelte), the widest open shape on the left / right ones. Along the
-/// edge the window spans it all (`placement::window_size`).
-const WINDOW_DEPTH: f64 = 300.0;
+/// edge the window spans it all (`placement::window_size`). Room for every
+/// module in its own card (DF-0011), the media player's included.
+const WINDOW_DEPTH: f64 = 600.0;
 const WINDOW_DEPTH_SIDE: f64 = 400.0;
 
 /// Around an open shape, in logical pixels: the cursor may stray this far
@@ -130,6 +138,7 @@ pub fn apply_hit_area(window: &WebviewWindow) -> tauri::Result<()> {
                 height: px(s.bounds.height),
                 radius: px(s.radius),
                 detached: !s.attached,
+                flare: px(s.flare),
             })
             .collect(),
         // Before the front reports: the compact notch, centered on the anchor.
@@ -153,6 +162,11 @@ pub fn apply_hit_area(window: &WebviewWindow) -> tauri::Result<()> {
                 height: shape.1,
                 radius: px(radius),
                 detached: placement.style == Style::Pill,
+                flare: if placement.style == Style::Pill {
+                    0
+                } else {
+                    px(FLARE)
+                },
             }]
         }
     };
