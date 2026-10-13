@@ -1,21 +1,28 @@
 use std::mem::{size_of, zeroed};
+use std::time::{Duration, Instant};
 
 use tauri::WebviewWindow;
 
 use crate::placement::Edge;
-use windows_sys::Win32::Foundation::{HWND, RECT};
+use windows_sys::Win32::Foundation::{CloseHandle, HWND, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     CombineRgn, CreateEllipticRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject,
     GetMonitorInfoW, HRGN, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO,
     MonitorFromPoint, MonitorFromWindow, RGN_DIFF, RGN_OR, SetWindowRgn,
 };
+use windows_sys::Win32::System::Threading::{
+    OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+};
 use windows_sys::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EVENT_SYSTEM_FOREGROUND, GWL_EXSTYLE, GWL_STYLE, GetClassNameW, GetForegroundWindow,
-    GetWindowLongPtrW, GetWindowRect, IsWindow, SetForegroundWindow, SetWindowLongPtrW,
-    WINEVENT_OUTOFCONTEXT, WM_NCACTIVATE, WM_NCPAINT, WS_CAPTION, WS_EX_APPWINDOW,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EVENT_SYSTEM_FOREGROUND, GW_HWNDPREV, GWL_EXSTYLE, GWL_STYLE, GetClassNameW,
+    GetForegroundWindow, GetWindow, GetWindowLongPtrW, GetWindowRect, HWND_BOTTOM, HWND_NOTOPMOST,
+    HWND_TOP, HWND_TOPMOST, IsWindow, IsWindowVisible, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, WINDOWPOS, WINEVENT_OUTOFCONTEXT, WM_NCACTIVATE, WM_NCPAINT,
+    WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
 };
 
 /// Turns the notch into a tool window that never takes focus:
@@ -35,6 +42,98 @@ pub fn prepare_overlay(window: &WebviewWindow) -> tauri::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Puts the notch back on top if it lost its place: the always-on-top style
+/// dropped, or (seen when Apple Music comes to the front) the style kept but
+/// an ordinary window ranked above it, which Windows should never allow.
+/// Only an actual `SetWindowPos` puts it back; asynchronous, as this runs on
+/// the topmost guard's thread (see `track_foreground`).
+fn ensure_topmost(hwnd: HWND) {
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let lost = if style & WS_EX_TOPMOST as isize == 0 {
+            Some("style dropped".to_owned())
+        } else {
+            ordinary_window_above(hwnd).map(|above| {
+                format!(
+                    "under {} of {}",
+                    class_name(above),
+                    process_name(above).unwrap_or_default()
+                )
+            })
+        };
+        if let Some(why) = lost {
+            log::warn!(
+                "notch no longer always on top ({why}, foreground: {}), restored",
+                foreground_class()
+            );
+            SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS,
+            );
+        }
+    }
+}
+
+/// Whether moving the notch after `after` in the z-order would take it out of
+/// the always-on-top windows.
+fn demotes(after: HWND) -> bool {
+    if after == HWND_TOPMOST || after == HWND_TOP {
+        return false;
+    }
+    after == HWND_NOTOPMOST
+        || after == HWND_BOTTOM
+        || unsafe { GetWindowLongPtrW(after, GWL_EXSTYLE) } & WS_EX_TOPMOST as isize == 0
+}
+
+/// A visible window without always on top above the visible notch in the
+/// z-order, if any. Only always-on-top windows should be: there are few of
+/// them, so the walk is short.
+fn ordinary_window_above(hwnd: HWND) -> Option<HWND> {
+    unsafe {
+        if IsWindowVisible(hwnd) == 0 {
+            return None;
+        }
+        let mut above = GetWindow(hwnd, GW_HWNDPREV);
+        while !above.is_null() {
+            if IsWindowVisible(above) != 0
+                && GetWindowLongPtrW(above, GWL_EXSTYLE) & WS_EX_TOPMOST as isize == 0
+            {
+                return Some(above);
+            }
+            above = GetWindow(above, GW_HWNDPREV);
+        }
+        None
+    }
+}
+
+/// File name of the program owning a window (`Music.exe`), for the log: the
+/// name alone, never the folder (it may hold the user's name).
+fn process_name(hwnd: HWND) -> Option<String> {
+    unsafe {
+        let mut pid = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return None;
+        }
+        let mut path = [0u16; 260];
+        let mut len = path.len() as u32;
+        let ok =
+            QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, path.as_mut_ptr(), &mut len);
+        CloseHandle(process);
+        if ok == 0 {
+            return None;
+        }
+        let path = String::from_utf16_lossy(&path[..len as usize]);
+        path.rsplit('\\').next().map(str::to_owned)
+    }
 }
 
 /// Stops Windows from drawing a window frame around the notch. The window has
@@ -67,6 +166,29 @@ unsafe extern "system" fn frameless_proc(
             // lParam -1: update the activation state without repainting the
             // frame (documented for WM_NCACTIVATE).
             WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
+            // Nobody takes the notch out of the always-on-top windows (another
+            // app, or Windows itself): the move is kept, on top.
+            WM_WINDOWPOSCHANGING => {
+                let pos = &mut *(lparam as *mut WINDOWPOS);
+                if pos.flags & SWP_NOZORDER == 0 && demotes(pos.hwndInsertAfter) {
+                    log::warn!(
+                        "notch kept always on top (foreground: {})",
+                        foreground_class()
+                    );
+                    pos.hwndInsertAfter = HWND_TOPMOST;
+                }
+                DefSubclassProc(hwnd, msg, wparam, lparam)
+            }
+            // Placed right after an ordinary window, the notch has already
+            // lost its style when told (the message then names one of our
+            // own windows): taken back as soon as the move is done.
+            WM_WINDOWPOSCHANGED => {
+                let pos = &*(lparam as *const WINDOWPOS);
+                if pos.flags & SWP_NOZORDER == 0 {
+                    ensure_topmost(hwnd);
+                }
+                DefSubclassProc(hwnd, msg, wparam, lparam)
+            }
             _ => DefSubclassProc(hwnd, msg, wparam, lparam),
         }
     }
@@ -78,9 +200,15 @@ unsafe extern "system" fn frameless_proc(
 /// settings, or a click on the notch right after them). So the window that
 /// was in front is followed (`EVENT_SYSTEM_FOREGROUND`, only sent when it
 /// changes), and `give_back_foreground` puts it back.
+/// The same event wakes the topmost guard: an app coming to the front can
+/// rank itself above the notch (Apple Music does), which the notch's own
+/// messages do not show. Checked then, and shortly after, never at rest.
 /// Called once, from the UI thread (the hook needs its message loop).
 pub fn track_foreground(notch: &WebviewWindow) -> tauri::Result<()> {
     NOTCH_HWND.store(notch.hwnd()?.0 as isize, Ordering::Relaxed);
+    let (wake, woken) = std::sync::mpsc::channel();
+    let _ = TOPMOST_GUARD.set(Mutex::new(wake));
+    std::thread::spawn(move || guard_topmost(woken));
     PREVIOUS_FOREGROUND.store(unsafe { GetForegroundWindow() } as isize, Ordering::Relaxed);
     unsafe {
         SetWinEventHook(
@@ -122,6 +250,49 @@ unsafe extern "system" fn on_foreground(
     let hwnd = hwnd as isize;
     if hwnd != 0 && hwnd != NOTCH_HWND.load(Ordering::Relaxed) {
         PREVIOUS_FOREGROUND.store(hwnd, Ordering::Relaxed);
+    }
+    if let Some(wake) = TOPMOST_GUARD.get() {
+        let _ = wake.lock().unwrap().send(());
+    }
+}
+
+/// Wakes the topmost guard's thread.
+static TOPMOST_GUARD: std::sync::OnceLock<Mutex<std::sync::mpsc::Sender<()>>> =
+    std::sync::OnceLock::new();
+/// When the notch's place is checked after a window comes to the front: some
+/// apps reorder their windows a little after being activated.
+const TOPMOST_CHECKS: [Duration; 3] = [
+    Duration::ZERO,
+    Duration::from_millis(150),
+    Duration::from_secs(1),
+];
+
+/// Asleep until a window comes to the front, then checks the notch's place
+/// at each of `TOPMOST_CHECKS` (started again by a newer change).
+fn guard_topmost(woken: std::sync::mpsc::Receiver<()>) {
+    use std::sync::mpsc::RecvTimeoutError;
+    let mut due: Vec<Instant> = Vec::new();
+    loop {
+        let woke = match due.iter().min() {
+            None => woken.recv().is_ok(),
+            Some(next) => {
+                match woken.recv_timeout(next.saturating_duration_since(Instant::now())) {
+                    Ok(()) => true,
+                    Err(RecvTimeoutError::Timeout) => false,
+                    Err(RecvTimeoutError::Disconnected) => return,
+                }
+            }
+        };
+        let now = Instant::now();
+        if woke {
+            due = TOPMOST_CHECKS.iter().map(|delay| now + *delay).collect();
+        } else if due.is_empty() {
+            return;
+        }
+        if due.iter().any(|at| *at <= now) {
+            due.retain(|at| *at > now);
+            ensure_topmost(NOTCH_HWND.load(Ordering::Relaxed) as HWND);
+        }
     }
 }
 
