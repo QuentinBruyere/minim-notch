@@ -160,10 +160,12 @@
   // compact, so the shape being dragged does not change under the cursor.
   const expanded = $derived((hovered || alerting) && !notice && !status.movable)
   // Hovered, every module shows; opened by an alert, only the alerting ones.
+  // A blank module (DF-0032) only matters to the closed notch.
   const visibleSections = $derived.by(() => {
-    if (hovered) return notchSections
-    const alerted = notchSections.filter((s) => alertModules.has(s.module))
-    return alerted.length > 0 ? alerted : notchSections
+    const drawn = notchSections.filter((s) => !s.blank)
+    if (hovered) return drawn
+    const alerted = drawn.filter((s) => alertModules.has(s.module))
+    return alerted.length > 0 ? alerted : drawn
   })
   const wideNotice = $derived(notice !== null && vertical)
   // Left / right edges: a module showing its value for a moment, or whose

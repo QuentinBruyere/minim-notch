@@ -62,6 +62,7 @@ Follow what comes next on the [roadmap](https://minim-notch.com/roadmap/).
 | **Volume** (Windows) | A slider and a mute button, shown for a moment when the volume changes. Optionally replaces the Windows volume pop-up: the volume keys then show in the notch only. |
 | **Media** (Windows) | What is playing on the computer (music, video, podcast), from any app, with its cover, a progress bar and play / pause / next buttons. Optionally takes over the media keys from Windows, whose pop-up then stays hidden. |
 | **Companion** | A companion that reacts to everything happening in the notch: music, a timer ringing, the time of day. |
+| **Blank notch** | Shows nothing: place it in the module list, and when no module above it is active, the closed notch stays black. The modules below are still there when you open the notch. |
 
 ### Official version
 

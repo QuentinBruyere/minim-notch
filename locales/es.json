@@ -2,6 +2,8 @@
   "action.pause": "Pausa",
   "action.reset": "Reiniciar",
   "action.start": "Iniciar",
+  "blank.description": "Deja el notch en negro cuando ningún módulo por encima está activo.",
+  "blank.name": "Notch vacío",
   "claude-code.companion_size": "Tamaño de los compañeros",
   "claude-code.companion_size.large": "Grande",
   "claude-code.companion_size.medium": "Mediano",

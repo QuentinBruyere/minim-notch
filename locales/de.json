@@ -2,6 +2,8 @@
   "action.pause": "Pause",
   "action.reset": "Zurücksetzen",
   "action.start": "Starten",
+  "blank.description": "Der Notch bleibt schwarz, wenn kein Modul darüber aktiv ist.",
+  "blank.name": "Leerer Notch",
   "claude-code.companion_size": "Größe der Begleiter",
   "claude-code.companion_size.large": "Groß",
   "claude-code.companion_size.medium": "Mittel",

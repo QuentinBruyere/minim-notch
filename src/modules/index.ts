@@ -1,6 +1,7 @@
 import type { LucideProps } from '@lucide/svelte'
 import SquareTerminal from '@lucide/svelte/icons/square-terminal'
 import Clock from '@lucide/svelte/icons/clock'
+import SquareDashed from '@lucide/svelte/icons/square-dashed'
 import PawPrint from '@lucide/svelte/icons/paw-print'
 import Hourglass from '@lucide/svelte/icons/hourglass'
 import Music from '@lucide/svelte/icons/music'
@@ -33,6 +34,7 @@ export type ModuleUis = Record<string, ModuleUi>
 
 // The modules shipped with the core.
 export const coreModuleUis: ModuleUis = {
+  blank: { icon: SquareDashed },
   'claude-code': { icon: SquareTerminal, settings: ClaudeCodeSettings },
   clock: { icon: Clock, settings: ClockSettings },
   companion: { icon: PawPrint, settings: CompanionSettings },

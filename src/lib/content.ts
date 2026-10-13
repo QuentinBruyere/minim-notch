@@ -111,6 +111,9 @@ export interface Section {
   pin: Side | null
   // Its pin opens when hovered; else it keeps its small shape (DF-0024).
   pinOpens: boolean
+  // The Blank notch module (DF-0032): no items, never drawn; the closed
+  // notch stops there (`compactSection`).
+  blank: boolean
 }
 
 // Side of a pin, mirrors `Side` in src-tauri/src/module.rs. On the left and
@@ -326,7 +329,9 @@ export function moduleOf(item: Item): string {
 }
 
 // What the compact notch shows (DF-0011): the module with the most urgent
-// alert, else the first module with items, in the user's order.
+// alert, else the first module with items, in the user's order. A blank
+// module stops the search (DF-0032): nothing then, a black notch. Before it,
+// a module whose items are all faded (a paused track) does not count.
 export function compactSection(sections: Section[]): Section | undefined {
   let alert: Section | undefined
   let rank = Infinity
@@ -339,5 +344,8 @@ export function compactSection(sections: Section[]): Section | undefined {
       }
     }
   }
-  return alert ?? sections.find((s) => s.items.length > 0)
+  if (alert) return alert
+  const blank = sections.findIndex((s) => s.blank)
+  if (blank < 0) return sections.find((s) => s.items.length > 0)
+  return sections.slice(0, blank).find((s) => s.items.some((i) => !i.dimmed))
 }

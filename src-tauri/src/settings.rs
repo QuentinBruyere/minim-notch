@@ -120,7 +120,7 @@ pub fn current(app: &AppHandle) -> Settings {
                     description: m.description(),
                     enabled,
                     pin: config.pins.get(m.id()).copied(),
-                    pinnable: enabled && first_enabled.as_deref() != Some(m.id()),
+                    pinnable: enabled && !m.blank() && first_enabled.as_deref() != Some(m.id()),
                     settings: if enabled { m.settings() } else { Value::Null },
                 }
             })
