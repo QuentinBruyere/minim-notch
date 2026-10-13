@@ -168,6 +168,7 @@
   "settings.companions.filter": "Begleiter-Paket",
   "settings.companions.hint": "Ihre eigenen Begleiter, wählbar per Rechtsklick auf eine Claude-Code-Sitzung oder im Modul Begleiter. Beginnen Sie mit der Vorlage, um Ihren eigenen zu zeichnen.",
   "settings.companions.import_failed": "Dieser Begleiter kann nicht hinzugefügt werden",
+  "settings.companions.intro": "Begleiter gibt es in den Modulen {companion} und {claude}.",
   "settings.companions.open_failed": "Der Begleiter-Ordner kann nicht geöffnet werden",
   "settings.companions.open_folder": "Ordner öffnen",
   "settings.companions.preview": "Animationen von {name}",

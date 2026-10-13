@@ -156,6 +156,18 @@ html[data-window='settings'] {
     color: var(--muted);
   }
 
+  /* A word of the intro that opens another page (a module's). */
+  & .intro .link,
+  & .intro .link:hover:not(:disabled) {
+    border: none;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
   /* The module being dragged to a new place (DF-0011): it follows the
      pointer, the others slide out of its way. */
   & .module-card.dragged {

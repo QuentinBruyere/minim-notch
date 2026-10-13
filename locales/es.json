@@ -168,6 +168,7 @@
   "settings.companions.filter": "Paquete de compañero",
   "settings.companions.hint": "Sus propios compañeros, para elegir con un clic derecho en una sesión de Claude Code o en el módulo Compañero. Parta de la plantilla para dibujar el suyo.",
   "settings.companions.import_failed": "No se puede añadir este compañero",
+  "settings.companions.intro": "Los compañeros están disponibles en los módulos {companion} y {claude}.",
   "settings.companions.open_failed": "No se puede abrir la carpeta de compañeros",
   "settings.companions.open_folder": "Abrir la carpeta",
   "settings.companions.preview": "Animaciones de {name}",

@@ -168,6 +168,7 @@
   "settings.companions.filter": "コンパニオンパック",
   "settings.companions.hint": "独自のコンパニオン。Claude Code のセッションを右クリックするか、コンパニオンモジュールで選べます。テンプレートから描き始めましょう。",
   "settings.companions.import_failed": "このコンパニオンを追加できません",
+  "settings.companions.intro": "コンパニオンは {companion} モジュールと {claude} モジュールで使えます。",
   "settings.companions.open_failed": "コンパニオンフォルダーを開けません",
   "settings.companions.open_folder": "フォルダーを開く",
   "settings.companions.preview": "{name} のアニメーション",
