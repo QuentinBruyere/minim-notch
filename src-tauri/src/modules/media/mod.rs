@@ -24,9 +24,13 @@ use serde_json::Value;
 pub(crate) struct Settings {
     /// Closed notch and pin: a "Title – Artist" too long scrolls.
     pub scroll: bool,
-    /// Closed notch and pin: only the cover; the text shows for a moment
-    /// when the track changes.
+    /// Closed notch: only the cover; the text shows for a moment when the
+    /// track changes.
     pub hide_text: bool,
+    /// The same in a pin.
+    pub hide_text_pin: bool,
+    /// Closed notch: the track's progress as a line along its outline.
+    pub progress: bool,
     /// The media keys are handled here and Windows shows nothing
     /// (ADR-0020). Windows only.
     pub replace_windows: bool,
@@ -37,6 +41,8 @@ impl Default for Settings {
         Self {
             scroll: true,
             hide_text: false,
+            hide_text_pin: true,
+            progress: true,
             replace_windows: false,
         }
     }
@@ -364,6 +370,8 @@ fn items(track: &Track, settings: &Settings, now: Instant) -> Vec<Item> {
         scroll: settings.scroll,
         // The cover alone; a new track still shows its text (spotlight).
         quiet: settings.hide_text,
+        pin_quiet: Some(settings.hide_text_pin),
+        outline: settings.progress,
         // Always the bar; it only moves the track if the app lets it seek.
         slider: match timeline.zip(position) {
             Some((t, p)) => Some(Slider {

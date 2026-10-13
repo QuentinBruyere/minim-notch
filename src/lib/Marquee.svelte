@@ -4,12 +4,16 @@
   // A compact view's text (closed notch, pin). Too long for its place: cut
   // with an ellipsis, or, if `scroll`, it slides left until its end reaches
   // the right edge, stays a moment, fades out and comes back at its start,
-  // like a car radio (DF-0017).
+  // like a car radio (DF-0017); once per text, then cut like the others
+  // (DF-0033). The view showing it says when it has already scrolled
+  // (`scroll` false): it outlives this component, redrawn when the notch
+  // opens and closes.
   let {
     text,
     scroll,
     dimmed = false,
     onturn,
+    onscrolled,
   }: {
     text: string
     scroll: boolean
@@ -18,6 +22,8 @@
     // its end at the right edge, a moment there, then faded out; 0 if it
     // fits. A spotlight ends there, before the text comes back at its start.
     onturn?: (ms: number) => void
+    // Told once the text has scrolled to its end and come back.
+    onscrolled?: () => void
   } = $props()
 
   const PX_PER_SECOND = 30
@@ -38,7 +44,13 @@
   })
   // How far the text has to go for its end to reach the right edge.
   const overflow = $derived(Math.max(0, textWidth - boxWidth))
-  const moving = $derived(scroll && overflow > 1)
+  // Scrolled once: a new text scrolls again.
+  let done = $state(false)
+  $effect(() => {
+    void text
+    done = false
+  })
+  const moving = $derived(scroll && overflow > 1 && !done)
 
   // Times in ms, turned into the offsets of one turn.
   $effect(() => {
@@ -50,7 +62,7 @@
     }
     const slide = (overflow / PX_PER_SECOND) * 1000
     report(START_MS + slide + END_MS + FADE_MS)
-    // When it stays shown, it then fades out and starts again.
+    // Then it fades out and comes back at its start, still.
     const marks = [START_MS, slide, END_MS, FADE_MS, FADE_MS]
     const total = marks.reduce((a, b) => a + b, 0)
     let at = 0
@@ -66,8 +78,12 @@
         { offset: at / total, transform: 'translateX(0)', opacity: 0 },
         { offset: offset(FADE_MS), transform: 'translateX(0)', opacity: 1 },
       ],
-      { duration: total, iterations: Infinity, easing: 'linear' },
+      { duration: total, easing: 'linear' },
     )
+    animation.onfinish = () => {
+      done = true
+      untrack(() => onscrolled?.())
+    }
     return () => animation.cancel()
   })
 </script>

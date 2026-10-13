@@ -124,6 +124,80 @@
   // nothing to say (a media module with nothing playing) keeps its icon.
   const quiet = $derived(!!top?.quiet && (shown?.module !== spotlight || !compactLabel))
 
+  // A playing track shows in full for a moment (a new track, playing again,
+  // a spotlight), then fades like a paused one: still there, no longer
+  // catching the eye. Longer if its text takes longer to scroll once.
+  // The compact text that has scrolled once already (DF-0033): kept here,
+  // the text itself is redrawn when the notch opens and closes.
+  let scrolledText = $state<string | null>(null)
+
+  const SETTLE_MS = 5000
+  let settled = $state(false)
+  let settleTimer: ReturnType<typeof setTimeout> | undefined
+  // When the full colours started, and when the text will have scrolled once.
+  let shownSince = 0
+  let readUntil = 0
+  const settleKey = $derived(
+    top?.activity === 'music' && !top.dimmed ? `${shown?.module}\n${compactLabel}` : null,
+  )
+  function settleLater() {
+    clearTimeout(settleTimer)
+    if (settleKey === null) return
+    const at = Math.max(shownSince + SETTLE_MS, readUntil)
+    settleTimer = setTimeout(() => (settled = true), at - Date.now())
+  }
+  function showInFull() {
+    settled = false
+    shownSince = Date.now()
+    settleLater()
+  }
+  $effect(() => {
+    void settleKey
+    showInFull()
+    return () => clearTimeout(settleTimer)
+  })
+  // A spotlight starting shows it in full again; its end changes nothing.
+  const spotlit = $derived(!!shown && shown.module === spotlight)
+  $effect(() => {
+    if (spotlit) showInFull()
+  })
+
+  // The closed notch's slider that is not a level (a track's progress,
+  // DF-0033), on the top and bottom edges: drawn along the outline.
+  const progress = $derived(
+    !notice &&
+      !expanded &&
+      edge !== 'left' &&
+      edge !== 'right' &&
+      !!top?.slider &&
+      top.outline &&
+      !top.meter &&
+      !quiet
+      ? top.slider
+      : null,
+  )
+  // Its path, half a line inside the shape: down the left side, along the
+  // bottom, up the right side, following the rounded corners. Drawn for the
+  // top edge, flipped for the bottom one. It comes out from under the
+  // outward curves (DF-0028): it starts where they meet the sides, the
+  // notch keeping its curves whole. The pill's top corners are left out.
+  const progressPath = $derived.by(() => {
+    const { width: w, height: h, radius: r } = notch
+    // The line reaches half a pixel past the edge, cut there with the notch:
+    // it covers the notch's own smoothed edge, no dark rim outside it.
+    const s = 0.75
+    const a = Math.max(0, r - s)
+    const from = style === 'notch' ? flare : r
+    return [
+      `M ${s} ${from}`,
+      `L ${s} ${h - r}`,
+      `A ${a} ${a} 0 0 0 ${r} ${h - s}`,
+      `L ${w - r} ${h - s}`,
+      `A ${a} ${a} 0 0 0 ${w - s} ${h - r}`,
+      `L ${w - s} ${from}`,
+    ].join(' ')
+  })
+
   function iconOf(module: string) {
     return moduleUis[module]?.icon ?? Puzzle
   }
@@ -265,7 +339,7 @@
             {#each top.stack as line, i (i)}<span>{line}</span>{/each}
           </span>
         {:else if top && top.image !== null && shown}
-          <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
+          <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed || settled} />
         {:else if ShownIcon}
           <ModuleIcon icon={ShownIcon} item={top} {onaction} />
         {/if}
@@ -285,7 +359,7 @@
             </span>
           {/if}
           {#if quiet && top.image !== null && shown}
-            <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
+            <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed || settled} />
           {:else if quiet && ShownIcon}
             <ModuleIcon icon={ShownIcon} item={top} {onaction} />
           {:else if top.meter && top.slider && ShownIcon}
@@ -303,26 +377,50 @@
               <span class="value">{Math.round(top.slider.value)}</span>
             {/if}
           {:else}
-            {#if top.slider}
-              <!-- Another slider's value as a small bar (a track's progress). -->
-              <span class="meter">
-                <span style:width="{sliderPercent(top.slider)}%"></span>
-              </span>
-            {/if}
             {#if top.image !== null && shown}
-              <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed} />
+              <Cover src={top.image} icon={iconOf(shown.module)} dimmed={top.dimmed || settled} />
             {/if}
             {#if compactLabel}
               <Marquee
                 text={compactLabel}
-                scroll={top.scroll}
-                dimmed={top.dimmed}
-                onturn={(ms) => shown && ontextreadtime(shown.module, ms)}
+                scroll={top.scroll && scrolledText !== compactLabel}
+                dimmed={top.dimmed || settled}
+                onturn={(ms) => {
+                  if (shown) ontextreadtime(shown.module, ms)
+                  readUntil = Date.now() + ms
+                  if (!settled) settleLater()
+                }}
+                onscrolled={() => (scrolledText = compactLabel)}
               />
             {/if}
           {/if}
           {#if compactTitle && !top.meter}<span class="muted">{compactTitle}</span>{/if}
         </span>
+      {/if}
+      {#if progress}
+        <!-- A track's progress (DF-0033): a line along the closed notch's
+             outline, down its left side, along the side away from the edge,
+             up its right side, out from under the outward curves. Fades in
+             once the notch has folded back, gone at once when it opens. -->
+        <svg
+          in:fade={{ delay: duration, duration }}
+          out:fade={{ duration: 0 }}
+          class="progress"
+          class:flipped={edge === 'bottom'}
+          class:faded={!!top?.dimmed || settled}
+          width={notch.width}
+          height={notch.height}
+          aria-hidden="true"
+        >
+          <path class="track" d={progressPath} pathLength="100" />
+          <path
+            class="done"
+            d={progressPath}
+            pathLength="100"
+            stroke-dasharray="100"
+            stroke-dashoffset={100 - sliderPercent(progress)}
+          />
+        </svg>
       {/if}
     </div>
     <!-- Separate layout: the other modules, one card each, rounded all round.
@@ -495,5 +593,39 @@
     height: 100%;
     background: var(--notch-fg);
     transition: width 150ms ease;
+  }
+
+  /* Over the whole closed notch, cut by its rounded corners; drawn for the
+     top edge, turned upside down on the bottom one, where the outline's
+     open side is the top. */
+  .progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    fill: none;
+    stroke-width: 2.5;
+  }
+
+  .progress.flipped {
+    transform: scaleY(-1);
+  }
+
+  /* The text colour, see-through: right on any notch colour or opacity.
+     Faded (paused, settled), its colour fades, not the whole line's
+     opacity, which would let the notch's edge show in the corners. */
+  .progress .track {
+    stroke: color-mix(in srgb, var(--notch-fg) 20%, transparent);
+  }
+
+  .progress .done {
+    stroke: var(--notch-fg);
+    transition:
+      stroke-dashoffset 150ms ease,
+      stroke calc(var(--duration, 250ms) * 3) ease;
+  }
+
+  .progress.faded .done {
+    stroke: color-mix(in srgb, var(--notch-fg) 50%, transparent);
   }
 </style>

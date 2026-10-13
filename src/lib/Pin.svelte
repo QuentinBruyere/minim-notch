@@ -75,9 +75,11 @@
 
   const top = $derived(mostUrgent(section.items))
   const compactLabel = $derived(top ? (top.compact?.label ?? top.label) : '')
+  // The text that has scrolled once already (DF-0033): a new one scrolls.
+  let scrolledText = $state<string | null>(null)
   // A spotlight shows the text of a quiet item, if it has one: an item with
   // nothing to say (a media module with nothing playing) keeps its icon.
-  const quiet = $derived(!!top?.quiet && (!spotlit || !compactLabel))
+  const quiet = $derived(!!(top?.pinQuiet ?? top?.quiet) && (!spotlit || !compactLabel))
   const dotted = $derived(
     compactMarks(section.items, vertical ? MAX_VERTICAL_COMPANIONS : MAX_COMPACT_COMPANIONS),
   )
@@ -187,9 +189,10 @@
           {#if compactLabel}
             <Marquee
               text={compactLabel}
-              scroll={top.scroll}
+              scroll={top.scroll && scrolledText !== compactLabel}
               dimmed={top.dimmed}
               onturn={(ms) => ontextreadtime(section.module, ms)}
+              onscrolled={() => (scrolledText = compactLabel)}
             />
           {/if}
           {#if top.compact?.title}<span class="muted">{top.compact.title}</span>{/if}
