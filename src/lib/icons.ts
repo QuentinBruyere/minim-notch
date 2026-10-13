@@ -1,6 +1,8 @@
 import type { LucideProps } from '@lucide/svelte'
+import Minus from '@lucide/svelte/icons/minus'
 import Pause from '@lucide/svelte/icons/pause'
 import Play from '@lucide/svelte/icons/play'
+import Plus from '@lucide/svelte/icons/plus'
 import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
 import SkipBack from '@lucide/svelte/icons/skip-back'
 import SkipForward from '@lucide/svelte/icons/skip-forward'
@@ -22,6 +24,8 @@ export const icons: Record<Icon, Component<LucideProps>> = {
   muted: VolumeX,
   previous: SkipBack,
   next: SkipForward,
+  minus: Minus,
+  plus: Plus,
 }
 
 // The icons drawn filled on buttons (closed shapes: play, pause, skip); the

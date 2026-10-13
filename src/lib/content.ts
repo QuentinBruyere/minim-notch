@@ -15,6 +15,8 @@ export type Icon =
   | 'muted'
   | 'previous'
   | 'next'
+  | 'minus'
+  | 'plus'
 
 // Mirrors `Action` in src-tauri/src/module.rs: a button at the end of a row.
 export interface Action {
@@ -32,6 +34,15 @@ export interface Slider {
   step: number
   // Shows the value only (a progress the app does not let seek).
   readonly: boolean
+}
+
+// Mirrors `Stepper` in src-tauri/src/module.rs: a value between less and
+// more buttons (a timer's duration); typed, if editable: `input:<text>`.
+export interface Stepper {
+  value: string
+  decrease: Action | null
+  increase: Action | null
+  editable: boolean
 }
 
 // Where a slider's value sits, from 0 to 100.
@@ -77,6 +88,8 @@ export interface Item {
   actions: Action[]
   // A slider in the open notch, between the title and the label.
   slider: Slider | null
+  // Shown in the open notch instead of the label.
+  stepper: Stepper | null
   // Nothing worth showing yet: compact views show the module's icon instead.
   // Nothing worth showing: compact views show the image, else the module's
   // icon; a spotlight shows the label for a moment.

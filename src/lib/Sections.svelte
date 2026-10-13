@@ -1,11 +1,13 @@
 <script lang="ts">
   import Puzzle from '@lucide/svelte/icons/puzzle'
+  import { invoke } from '@tauri-apps/api/core'
+  import { listen } from '@tauri-apps/api/event'
   import type { ModuleUis } from '../modules'
   import Cover from './Cover.svelte'
   import Dot from './Dot.svelte'
   import ModuleIcon from './ModuleIcon.svelte'
   import { rowWidth } from './companions'
-  import { sliderPercent, type Item, type Section } from './content'
+  import { sliderPercent, type Action, type Icon, type Item, type Section } from './content'
   import { filled, icons } from './icons'
 
   // The modules shown in an open card or pin, one part each, its icon first
@@ -49,7 +51,109 @@
   // While a slider is held, it shows the cursor's value, not the module's:
   // the module's own updates would make it jump back under the cursor.
   let held = $state<Record<string, number>>({})
+
+  // The stepper value being typed (a timer's duration): the notch has the
+  // keyboard meanwhile (`set_typing`), and gives it back when done.
+  let typing = $state<{ item: string; text: string } | null>(null)
+  function startTyping(item: Item) {
+    typing = { item: item.id, text: item.stepper!.value }
+    void invoke('set_typing', { typing: true })
+  }
+  // Confirmed (Enter, a click elsewhere, the notch closing), or not
+  // (Escape). Not on blur: the window handing the focus around blurs it on
+  // the way. A click in another app takes the keyboard away: the backend
+  // ends typing there and says so ("typing-lost").
+  function endTyping(confirmed: boolean) {
+    if (!typing) return
+    const { item, text } = typing
+    typing = null
+    void invoke('set_typing', { typing: false })
+    if (confirmed) onaction(item, `input:${text}`)
+  }
+  $effect(() => {
+    const unlisten = listen('typing-lost', () => endTyping(true))
+    return () => void unlisten.then((stop) => stop())
+  })
+  // The field takes the keyboard, its text selected. A click anywhere else
+  // in the notch or a pin confirms; removed (the notch closing), too.
+  function typingField(node: HTMLInputElement) {
+    node.focus()
+    node.select()
+    const onpointerdown = (e: PointerEvent) => {
+      if (!node.contains(e.target as Node)) endTyping(true)
+    }
+    window.addEventListener('pointerdown', onpointerdown, true)
+    return {
+      destroy: () => {
+        window.removeEventListener('pointerdown', onpointerdown, true)
+        endTyping(true)
+      },
+    }
+  }
+  // The wheel over the value: up for more, down for less. Not passive: the
+  // list must not scroll meanwhile.
+  function wheelSteps(node: HTMLElement, item: Item) {
+    let current = item
+    const onwheel = (e: WheelEvent) => {
+      const stepper = current.stepper
+      const action = e.deltaY < 0 ? stepper?.increase : stepper?.decrease
+      e.preventDefault()
+      if (action && !typing) onaction(current.id, action.id)
+    }
+    node.addEventListener('wheel', onwheel, { passive: false })
+    return {
+      update: (next: Item) => (current = next),
+      destroy: () => node.removeEventListener('wheel', onwheel),
+    }
+  }
 </script>
+
+{#snippet stepButton(item: Item, action: Action | null, icon: Icon)}
+  {@const StepIcon = icons[icon]}
+  <button
+    class="action"
+    title={action?.label}
+    aria-label={action?.label}
+    disabled={!action}
+    onclick={(e) => {
+      e.stopPropagation()
+      if (action) onaction(item.id, action.id)
+    }}
+  >
+    <StepIcon size={13} strokeWidth={2.5} />
+  </button>
+{/snippet}
+
+{#snippet stepper(item: Item)}
+  {@const stepper = item.stepper!}
+  <span class="stepper" use:wheelSteps={item}>
+    {@render stepButton(item, stepper.decrease, 'minus')}
+    {#if typing?.item === item.id}
+      <input
+        class="value typed"
+        aria-label={item.title}
+        bind:value={typing.text}
+        use:typingField
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') endTyping(true)
+          else if (e.key === 'Escape') endTyping(false)
+        }}
+      />
+    {:else if stepper.editable}
+      <button
+        class="value editable"
+        onclick={(e) => {
+          e.stopPropagation()
+          startTyping(item)
+        }}>{stepper.value}</button
+      >
+    {:else}
+      <span class="value">{stepper.value}</span>
+    {/if}
+    {@render stepButton(item, stepper.increase, 'plus')}
+  </span>
+{/snippet}
 
 {#snippet slider(item: Item)}
   {@const slider = item.slider!}
@@ -183,9 +287,14 @@
               {/if}
               {#if item.title}<span class="title">{item.title}</span>{/if}
               {#if item.slider}{@render slider(item)}{/if}
-              <span class="label" class:lead={!item.title && !item.slider} class:value={!!item.slider}>
-                {item.label}{item.detail ? ` · ${item.detail}` : ''}
-              </span>
+              {#if item.stepper}
+                {@render stepper(item)}
+                {#if item.detail}<span class="label lead">{item.detail}</span>{/if}
+              {:else}
+                <span class="label" class:lead={!item.title && !item.slider} class:value={!!item.slider}>
+                  {item.label}{item.detail ? ` · ${item.detail}` : ''}
+                </span>
+              {/if}
               {#if item.actions.length > 0}{@render actions(item, 13)}{/if}
             </li>
           {/if}
@@ -338,6 +447,46 @@
     flex-shrink: 0;
   }
 
+  /* Less, the value, more (a timer's duration), after the title; the
+     buttons at the end of the row keep their place. */
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .stepper + .label {
+    margin-left: 0;
+  }
+
+  .stepper .action:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .stepper .value {
+    all: unset;
+    box-sizing: border-box;
+    width: 7ch;
+    height: 20px;
+    padding: 0 4px;
+    border-radius: 6px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stepper .value.editable {
+    cursor: text;
+    transition: background-color 150ms ease;
+  }
+
+  .stepper .value.editable:hover,
+  .stepper .value.typed {
+    background: var(--notch-button);
+  }
+
   .action {
     all: unset;
     display: grid;
@@ -351,9 +500,20 @@
     transition: background-color 150ms ease;
   }
 
+  /* A text button (a timer's favourite durations): plain text, fainter, no
+     background until hovered; the icon buttons stand out from it. */
   .action.text {
-    padding: 0 7px;
+    padding: 0 6px;
     font-size: 11px;
+    background: transparent;
+    opacity: 0.6;
+    transition:
+      background-color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .action.text:hover {
+    opacity: 1;
   }
 
   .action:hover {

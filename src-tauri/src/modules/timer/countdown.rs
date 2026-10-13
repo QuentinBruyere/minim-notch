@@ -61,6 +61,13 @@ impl Countdown {
         }
     }
 
+    /// Takes time off a timer not started yet, down to zero.
+    pub fn subtract(&mut self, less: Duration, now: Instant) {
+        if self.phase(now) == Phase::Idle {
+            self.duration = self.duration.saturating_sub(less);
+        }
+    }
+
     pub fn reset(&mut self, duration: Duration) {
         *self = Self::new(duration);
     }
@@ -106,6 +113,18 @@ mod tests {
         assert_eq!(timer.phase(t0 + s(999)), Phase::Finished);
         assert_eq!(timer.remaining_secs(t0 + s(999)), 0);
         assert!(!timer.settle(t0 + s(999)));
+    }
+
+    #[test]
+    fn subtracting_time_only_before_the_start() {
+        let t0 = Instant::now();
+        let mut timer = Countdown::new(s(60));
+        timer.subtract(s(90), t0);
+        assert_eq!(timer.remaining_secs(t0), 0);
+        timer.reset(s(300));
+        timer.start(t0);
+        timer.subtract(s(60), t0 + s(10));
+        assert_eq!(timer.remaining_secs(t0 + s(10)), 290);
     }
 
     #[test]

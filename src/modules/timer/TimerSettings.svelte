@@ -6,7 +6,15 @@
   interface Data {
     defaultMinutes: number
     favorites: number[]
+    stepSeconds: number
   }
+
+  // The less / more steps offered (`STEPS` in Rust), in seconds.
+  const steps = [30, 60, 120, 300]
+  const stepText = (seconds: number) =>
+    seconds % 60 === 0
+      ? t('timer.minutes', { minutes: seconds / 60 })
+      : t('timer.seconds', { seconds })
 
   let { data: raw, call }: ModuleSettingsProps = $props()
   const data = $derived(raw as Data)
@@ -60,3 +68,17 @@
     <button disabled={favorites === data.favorites.join(', ')}>{t('settings.apply')}</button>
   </div>
 </form>
+<label class="row separated">
+  <div>
+    <div class="label">{t('timer.step')}</div>
+    <div class="hint">{t('timer.step_hint')}</div>
+  </div>
+  <select
+    value={data.stepSeconds}
+    onchange={(e) => void call('update', { ...data, stepSeconds: Number(e.currentTarget.value) })}
+  >
+    {#each steps as step (step)}
+      <option value={step}>{stepText(step)}</option>
+    {/each}
+  </select>
+</label>

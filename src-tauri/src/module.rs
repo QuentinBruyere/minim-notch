@@ -49,6 +49,26 @@ pub enum Icon {
     Previous,
     /// On to the next track.
     Next,
+    /// Less (a stepper's decrease).
+    Minus,
+    /// More (a stepper's increase).
+    Plus,
+}
+
+/// A value between a "less" and a "more" button in an item's row of the
+/// open notch (e.g. a timer's duration). The buttons, and the mouse wheel
+/// over the value, call `Module::item_action` with their action's id.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Stepper {
+    /// Shown between the buttons.
+    pub value: String,
+    /// `None`: no "less" button (e.g. already at zero).
+    pub decrease: Option<Action>,
+    pub increase: Option<Action>,
+    /// A click on the value lets the user type another one: sent to
+    /// `Module::item_action` as `input:<text>` when confirmed.
+    pub editable: bool,
 }
 
 /// What an item is busy with, for whoever reacts to the notch (the
@@ -129,6 +149,9 @@ pub struct Item {
     pub actions: Vec<Action>,
     /// A slider shown in the open notch, between the title and the label.
     pub slider: Option<Slider>,
+    /// Shown in the open notch instead of the label (the compact views keep
+    /// the label): a value with "less" and "more" buttons around it.
+    pub stepper: Option<Stepper>,
     /// Nothing worth showing yet (e.g. a stopwatch at zero): the compact
     /// views (closed notch, pin) show the module's icon instead of the label,
     /// or the item's `image` if it has one. A spotlight (`Host::spotlight`)
