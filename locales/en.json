@@ -2,6 +2,8 @@
   "action.pause": "Pause",
   "action.reset": "Reset",
   "action.start": "Start",
+  "blank.description": "Keeps the notch black when no module above it is active.",
+  "blank.name": "Blank notch",
   "claude-code.companion_size": "Companion size",
   "claude-code.companion_size.large": "Large",
   "claude-code.companion_size.medium": "Medium",

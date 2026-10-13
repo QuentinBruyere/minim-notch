@@ -2,6 +2,8 @@
   "action.pause": "一時停止",
   "action.reset": "リセット",
   "action.start": "開始",
+  "blank.description": "上にあるモジュールがどれも動いていないとき、ノッチを黒いままにします。",
+  "blank.name": "空のノッチ",
   "claude-code.companion_size": "コンパニオンの大きさ",
   "claude-code.companion_size.large": "大",
   "claude-code.companion_size.medium": "中",

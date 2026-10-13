@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use minim_notch_lib::modules::blank::Blank;
 use minim_notch_lib::modules::claude_code::ClaudeCode;
 use minim_notch_lib::modules::clock::Clock;
 use minim_notch_lib::modules::companion::DeskCompanion;
@@ -21,6 +22,7 @@ fn main() {
             Box::new(Volume::default()),
             Box::new(DeskCompanion::default()),
             Box::new(Media::default()),
+            Box::new(Blank),
         ],
     );
 }

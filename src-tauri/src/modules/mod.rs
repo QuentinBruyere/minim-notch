@@ -1,5 +1,6 @@
 //! Modules shipped with the public core (ADR-0009): one folder per module.
 
+pub mod blank;
 pub mod claude_code;
 pub mod clock;
 pub mod companion;

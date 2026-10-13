@@ -261,6 +261,13 @@ pub trait Module: Send + Sync + 'static {
     fn pin_opens(&self) -> bool {
         true
     }
+    /// Shows nothing, and the closed notch stops at it (the Blank notch
+    /// module, DF-0032): modules after it in the user's order only show in
+    /// the closed notch for an alert. Never drawn in the open notch, never
+    /// pinned.
+    fn blank(&self) -> bool {
+        false
+    }
     /// Submenus of choices for the right-click menu of an item, above the
     /// module's own entries (pin, unpin); none by default.
     fn item_menu(&self, _item: &str) -> Vec<ItemMenu> {
@@ -371,6 +378,8 @@ pub struct Section {
     pub pin: Option<Side>,
     /// Its pin opens when hovered (`Module::pin_opens`).
     pub pin_opens: bool,
+    /// Where the closed notch stops (`Module::blank`): no items, not drawn.
+    pub blank: bool,
 }
 
 /// Where a pinned module's mini-notch is, next to the notch. On the left and
@@ -409,14 +418,15 @@ pub(crate) fn is_enabled(module: &dyn Module, config: &config::Config) -> bool {
 /// The modules in the user's order: those listed in `order` first, the
 /// others (e.g. newly installed ones) after, in their declaration order.
 /// The first enabled module in the user's order: the notch itself, which
-/// cannot be pinned (DF-0012).
+/// cannot be pinned (DF-0012). A blank module (DF-0032) shows nothing: the
+/// next one is.
 pub(crate) fn first_enabled<'a>(
     modules: &'a [Box<dyn Module>],
     config: &config::Config,
 ) -> Option<&'a dyn Module> {
     ordered(modules, &config.module_order)
         .into_iter()
-        .find(|m| is_enabled(*m, config))
+        .find(|m| is_enabled(*m, config) && !m.blank())
 }
 
 pub(crate) fn ordered<'a>(modules: &'a [Box<dyn Module>], order: &[String]) -> Vec<&'a dyn Module> {
@@ -466,10 +476,24 @@ pub(crate) fn content(modules: &[Box<dyn Module>], config: &config::Config) -> C
         .into_iter()
         .filter(|m| is_enabled(*m, config))
         .collect();
-    let ids: Vec<&str> = enabled.iter().map(|m| m.id()).collect();
-    let sides = pin_sides(&ids, &config.pins);
+    // A blank module is never pinned, nor the notch itself (DF-0032).
+    let ids: Vec<&str> = enabled
+        .iter()
+        .filter(|m| !m.blank())
+        .map(|m| m.id())
+        .collect();
+    let mut sides = pin_sides(&ids, &config.pins).into_iter();
     let any_enabled = !enabled.is_empty();
-    for (module, pin) in enabled.into_iter().zip(sides) {
+    for module in enabled {
+        if module.blank() {
+            content.sections.push(Section {
+                module: module.id().into(),
+                blank: true,
+                ..Section::default()
+            });
+            continue;
+        }
+        let pin = sides.next().flatten();
         let items: Vec<Item> = module
             .items()
             .into_iter()
@@ -490,6 +514,7 @@ pub(crate) fn content(modules: &[Box<dyn Module>], config: &config::Config) -> C
                 note,
                 pin,
                 pin_opens: module.pin_opens(),
+                blank: false,
             });
         }
     }
@@ -600,6 +625,35 @@ mod tests {
         let content = super::content(&modules(), &config);
         assert!(content.sections.is_empty());
         assert_eq!(content.note.as_deref(), Some("No module enabled"));
+    }
+
+    #[test]
+    fn a_blank_module_keeps_its_place_and_is_never_pinned() {
+        let mut modules = modules();
+        modules.insert(0, Box::new(crate::modules::blank::Blank));
+        let mut config = config::Config::default();
+        config.modules.entry("blank".into()).or_default().enabled = Some(true);
+        for id in ["blank", "a", "b"] {
+            config.pins.insert(id.into(), PinSide::Auto);
+        }
+        let content = content(&modules, &config);
+        let shown: Vec<_> = content
+            .sections
+            .iter()
+            .map(|s| (s.module.as_str(), s.blank, s.pin))
+            .collect();
+        // The blank module first: "a" is the notch itself, not pinned.
+        assert_eq!(
+            shown,
+            [
+                ("blank", true, None),
+                ("a", false, None),
+                ("b", false, Some(Side::Right))
+            ]
+        );
+        assert!(content.sections[0].items.is_empty());
+        assert_eq!(content.sections[0].note, None);
+        assert_eq!(first_enabled(&modules, &config).map(|m| m.id()), Some("a"));
     }
 
     #[test]
