@@ -119,6 +119,9 @@
   // new track): the closed notch, or their pins, show their value for a
   // moment. Several at once each keep their own time; the last one is last.
   let spotlights = $state<string[]>([])
+  // Spotlights whose time is over but still shown while the notch goes
+  // back into the edge (auto-hide): they no longer keep it out.
+  let spotlightsDone = $state<string[]>([])
   let pinAlerting = $state(false)
   let pinAlerts = $state<Set<string>>(new Set())
   // Closed width each pin needs, measured by Pin.svelte.
@@ -401,7 +404,7 @@
       pinHover !== null ||
       alerting ||
       pinAlerting ||
-      spotlights.length > 0 ||
+      spotlights.some((m) => !spotlightsDone.includes(m)) ||
       notice !== null ||
       ringing(content.sections),
   )
@@ -409,9 +412,17 @@
   $effect(() => {
     if (wanted) {
       tucked = false
+      // Out for something else: spotlights over show what they hid again.
+      if (spotlightsDone.length > 0) dropDoneSpotlights()
       return
     }
     const timer = setTimeout(() => (tucked = true), status.autoHideDelayMs)
+    return () => clearTimeout(timer)
+  })
+  // Spotlights over go once the notch has slid into the edge.
+  $effect(() => {
+    if (!tucked || spotlightsDone.length === 0) return
+    const timer = setTimeout(dropDoneSpotlights, duration)
     return () => clearTimeout(timer)
   })
   // The backend moves the pill to the edge and lets the cursor pass.
@@ -637,8 +648,16 @@
     clearTimeout(spotlightTimers[module])
     spotlightTimers[module] = setTimeout(() => {
       delete spotlightTimes[module]
-      spotlights = spotlights.filter((m) => m !== module)
+      // With auto-hide, the notch goes back into the edge a little later
+      // (DF-0018): the module stays shown until it is in, rather than
+      // leaving it to show something else on its way.
+      if (status.autoHide && !tucked) spotlightsDone = [...spotlightsDone, module]
+      else spotlights = spotlights.filter((m) => m !== module)
     }, Math.max(0, end - Date.now()))
+  }
+  function dropDoneSpotlights() {
+    spotlights = spotlights.filter((m) => !spotlightsDone.includes(m))
+    spotlightsDone = []
   }
   function textReadTime(module: string, ms: number) {
     readUntil[module] = Date.now() + ms
@@ -725,6 +744,7 @@
       listen<{ module: string; ms: number }>('spotlight', (e) => {
         const module = e.payload.module
         spotlights = [...spotlights.filter((m) => m !== module), module]
+        spotlightsDone = spotlightsDone.filter((m) => m !== module)
         spotlightTimes[module] = { since: Date.now(), ms: e.payload.ms }
         endSpotlight(module)
       }),
