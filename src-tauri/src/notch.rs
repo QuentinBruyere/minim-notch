@@ -249,6 +249,73 @@ pub fn set_tucked(app: &AppHandle, tucked: bool) {
     }
 }
 
+/// The user is typing in the notch (a timer's duration): it keeps the
+/// keyboard until done, instead of giving the focus straight back.
+static TYPING: AtomicBool = AtomicBool::new(false);
+
+pub fn typing() -> bool {
+    TYPING.load(Ordering::Relaxed)
+}
+
+/// When typing started: the focus handed around just before is no loss.
+static TYPING_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+const TYPING_SETTLE: Duration = Duration::from_millis(300);
+
+/// Starts or ends typing in the notch. The notch never takes the focus
+/// otherwise: here it comes to the front with the keyboard, then hands it
+/// back to the window that had it.
+pub fn set_typing(app: &AppHandle, typing: bool) {
+    end_or_start_typing(app, typing, true);
+}
+
+/// The notch lost the keyboard while the user typed (a click in another
+/// app): typing ends there, confirmed by the front ("typing-lost"), and the
+/// focus stays where the user put it.
+pub fn focus_lost(app: &AppHandle) {
+    let settled = TYPING_SINCE
+        .lock()
+        .unwrap()
+        .is_some_and(|since| since.elapsed() >= TYPING_SETTLE);
+    if typing() && settled {
+        end_or_start_typing(app, false, false);
+        let _ = app.emit("typing-lost", ());
+    }
+}
+
+fn end_or_start_typing(app: &AppHandle, typing: bool, give_back: bool) {
+    if TYPING.swap(typing, Ordering::Relaxed) == typing {
+        return;
+    }
+    *TYPING_SINCE.lock().unwrap() = typing.then(Instant::now);
+    let Some(window) = app.get_webview_window(NOTCH_LABEL) else {
+        return;
+    };
+    let result = if typing {
+        window
+            .set_focusable(true)
+            .and_then(|_| platform::bring_to_front(&window))
+            .and_then(|_| window.set_focus())
+    } else {
+        let result = window.set_focusable(false);
+        if give_back {
+            platform::give_back_foreground();
+        }
+        result
+    };
+    if let Err(e) = result {
+        log::warn!("cannot change typing in the notch: {e}");
+    }
+    log::info!(
+        "typing in the notch {}: foreground {}",
+        if typing { "started" } else { "ended" },
+        platform::foreground_class()
+    );
+    // Tauri rewrites the extended style when the focusability changes.
+    if let Err(e) = platform::prepare_overlay(&window) {
+        log::warn!("cannot restore overlay styles: {e}");
+    }
+}
+
 /// Cursor resistance runs only while the notch is shown and the option is on,
 /// never in move mode (the cursor must reach the notch freely to grab it)
 /// nor tucked (the cursor would stop at a notch it cannot see).

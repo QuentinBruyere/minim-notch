@@ -186,6 +186,12 @@ fn set_tucked(app: AppHandle, tucked: bool) {
     notch::set_tucked(&app, tucked);
 }
 
+/// The front starts or ends typing in the notch (a timer's duration).
+#[tauri::command]
+fn set_typing(app: AppHandle, typing: bool) {
+    notch::set_typing(&app, typing);
+}
+
 fn content(state: &AppState) -> Content {
     // Clone and release: modules may lock the config while listing items.
     let config = state.config.lock().unwrap().clone();
@@ -255,6 +261,7 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
             settings::set_notch_opacity,
             settings::set_notch_grain,
             set_tucked,
+            set_typing,
             settings::set_module_pin,
             settings::module_call,
             settings::open_link,
@@ -347,7 +354,14 @@ pub fn run(context: tauri::Context, mut modules: Vec<Box<dyn Module>>) {
                 return;
             }
             // The notch never keeps the focus: see `platform::track_foreground`.
-            if let WindowEvent::Focused(true) = event {
+            // But while the user types in it (`notch::set_typing`).
+            // Typing, a loss of the keyboard (a click elsewhere) ends it.
+            if let WindowEvent::Focused(false) = event {
+                notch::focus_lost(window.app_handle());
+            }
+            if let WindowEvent::Focused(true) = event
+                && !notch::typing()
+            {
                 log::info!("notch took the focus, given back");
                 platform::give_back_foreground();
             }

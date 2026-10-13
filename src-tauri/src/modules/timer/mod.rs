@@ -1,7 +1,7 @@
 //! Timer module: counts down from a chosen duration, set and controlled from
-//! its buttons in the open notch; rings when the time is up. Default and
-//! favourite durations come from its settings. Off by default; not kept when
-//! Minim Notch quits.
+//! the open notch (typed, or less / more by a step, around the duration);
+//! rings when the time is up. Default and favourite durations and the step
+//! come from its settings. Off by default; not kept when Minim Notch quits.
 
 mod countdown;
 
@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::module::{Action, Compact, Host, Icon, Item, Module, Tone, format_duration};
+use crate::module::{Action, Compact, Host, Icon, Item, Module, Stepper, Tone, format_duration};
 use crate::t;
 use countdown::{Countdown, Phase};
 
@@ -20,6 +20,8 @@ use countdown::{Countdown, Phase};
 const IDLE_WAIT: Duration = Duration::from_millis(500);
 const MAX_MINUTES: u64 = 600;
 const MAX_FAVORITES: usize = 5;
+/// The less / more steps offered in the settings, in seconds.
+const STEPS: [u64; 4] = [30, 60, 120, 300];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -28,6 +30,8 @@ struct Settings {
     default_minutes: u64,
     /// One-click durations, shown in the open notch while the timer is idle.
     favorites: Vec<u64>,
+    /// What the less / more buttons take off or add, in seconds (`STEPS`).
+    step_seconds: u64,
 }
 
 impl Default for Settings {
@@ -35,6 +39,7 @@ impl Default for Settings {
         Self {
             default_minutes: 5,
             favorites: vec![5, 15, 25],
+            step_seconds: 60,
         }
     }
 }
@@ -44,7 +49,14 @@ impl Settings {
         minutes(self.default_minutes)
     }
 
+    fn step(&self) -> Duration {
+        Duration::from_secs(self.step_seconds)
+    }
+
     fn validate(mut self) -> Result<Self, String> {
+        if !STEPS.contains(&self.step_seconds) {
+            return Err(t!("timer.step_invalid"));
+        }
         let valid = |m: u64| (1..=MAX_MINUTES).contains(&m);
         // A timer may start from zero: its minutes are then added in the notch.
         if self.default_minutes > MAX_MINUTES {
@@ -68,6 +80,32 @@ impl Settings {
 
 fn minutes(m: u64) -> Duration {
     Duration::from_secs(m * 60)
+}
+
+/// A duration typed in the notch: minutes ("5", "90"), or "m:ss", or
+/// "h:mm:ss" ("1:30" is a minute and a half). Up to `MAX_MINUTES`.
+fn parse_duration(text: &str) -> Option<Duration> {
+    let parts: Vec<u64> = text
+        .trim()
+        .split(':')
+        .map(|p| p.trim().parse().ok())
+        .collect::<Option<_>>()?;
+    let seconds = match parts[..] {
+        [m] => m.checked_mul(60)?,
+        [m, s] if s < 60 => m.checked_mul(60)? + s,
+        [h, m, s] if m < 60 && s < 60 => h.checked_mul(3600)? + m * 60 + s,
+        _ => return None,
+    };
+    (seconds <= MAX_MINUTES * 60).then(|| Duration::from_secs(seconds))
+}
+
+/// "30 s", "2 min": a step as the buttons' tooltips say it.
+fn step_text(seconds: u64) -> String {
+    if seconds.is_multiple_of(60) {
+        t!("timer.minutes", minutes = seconds / 60)
+    } else {
+        t!("timer.seconds", seconds = seconds)
+    }
 }
 
 pub struct Timer {
@@ -168,18 +206,30 @@ impl Module for Timer {
 
     fn item_action(&self, _item: &str, action: &str) {
         let now = Instant::now();
-        let default = self.inner.settings.lock().unwrap().default_duration();
+        let (default, step) = {
+            let settings = self.inner.settings.lock().unwrap();
+            (settings.default_duration(), settings.step())
+        };
         {
             let mut countdown = self.inner.countdown.lock().unwrap();
+            // The duration changes before the start only.
+            let idle = countdown.phase(now) == Phase::Idle;
             match action.split_once(':') {
                 None if action == "start" => countdown.start(now),
                 None if action == "pause" => countdown.pause(now),
                 None if action == "reset" => countdown.reset(default),
-                Some(("add", m)) => {
-                    if let Ok(m) = m.parse() {
-                        countdown.add(minutes(m), now);
+                None if action == "decrease" && idle => countdown.subtract(step, now),
+                None if action == "increase" && idle => {
+                    let max = minutes(MAX_MINUTES);
+                    if countdown.duration + step <= max {
+                        countdown.add(step, now);
                     }
                 }
+                // Typed in the notch, before the start only.
+                Some(("input", text)) => match parse_duration(text) {
+                    Some(duration) if idle => countdown.reset(duration),
+                    _ => return,
+                },
                 Some(("set", m)) => {
                     if let Ok(m) = m.parse() {
                         countdown.reset(minutes(m));
@@ -219,26 +269,37 @@ impl Module for Timer {
 }
 
 fn items(countdown: &Countdown, settings: &Settings, now: Instant) -> Vec<Item> {
-    let add = |m: u64| Action::text(&format!("add:{m}"), &t!("timer.add", minutes = m));
+    let step = step_text(settings.step_seconds);
     let start = Action::icon("start", Icon::Play, &t!("action.start"));
     let pause = Action::icon("pause", Icon::Pause, &t!("action.pause"));
     let reset = Action::icon("reset", Icon::Reset, &t!("action.reset"));
     let remaining = format_duration(countdown.remaining_secs(now));
 
     let phase = countdown.phase(now);
+    // Before the start, the duration between less and more, typed if wanted;
+    // nothing less at zero. Started, the time left only.
+    let stepper = (phase == Phase::Idle).then(|| Stepper {
+        value: remaining.clone(),
+        decrease: (!countdown.duration.is_zero())
+            .then(|| Action::icon("decrease", Icon::Minus, &t!("timer.decrease", step = &step))),
+        increase: Some(Action::icon(
+            "increase",
+            Icon::Plus,
+            &t!("timer.increase", step = &step),
+        )),
+        editable: true,
+    });
     let (label, detail, tone, actions) = match phase {
         Phase::Idle => {
-            let mut actions = vec![add(1), add(5)];
-            // Nothing to count down from zero: add minutes first.
+            let mut actions = Vec::new();
+            // Nothing to count down from zero: add time first. No reset
+            // before the start.
             if !countdown.duration.is_zero() {
                 actions.push(start);
             }
-            if countdown.duration != settings.default_duration() {
-                actions.push(reset);
-            }
             (remaining, None, Tone::Neutral, actions)
         }
-        Phase::Running => (remaining, None, Tone::Active, vec![add(1), pause, reset]),
+        Phase::Running => (remaining, None, Tone::Active, vec![pause, reset]),
         Phase::Paused => (
             remaining,
             Some(t!("item.paused")),
@@ -261,6 +322,7 @@ fn items(countdown: &Countdown, settings: &Settings, now: Instant) -> Vec<Item> 
         tone,
         dot: false,
         actions,
+        stepper,
         // Not started: the compact views show the timer icon.
         quiet: phase == Phase::Idle,
         ringing: phase == Phase::Finished,
@@ -325,7 +387,12 @@ mod tests {
         let settings = Settings::default();
         let items = items(&Countdown::new(minutes(5)), &settings, Instant::now());
         assert_eq!(items[0].label, "05:00");
-        assert_eq!(ids(&items[0]), ["add:1", "add:5", "start"]);
+        assert_eq!(ids(&items[0]), ["start"]);
+        let stepper = items[0].stepper.as_ref().unwrap();
+        assert_eq!(stepper.value, "05:00");
+        assert!(stepper.editable);
+        assert_eq!(stepper.decrease.as_ref().unwrap().label, "Take off 1 min");
+        assert_eq!(stepper.increase.as_ref().unwrap().label, "Add 1 min");
         assert_eq!(ids(&items[1]), ["set:5", "set:15", "set:25"]);
         assert_eq!(items[1].actions[1].label, "15 min");
     }
@@ -343,6 +410,7 @@ mod tests {
         assert_eq!(items[0].tone, Tone::Attention);
         assert!(items[0].ringing);
         assert_eq!(ids(&items[0]), ["reset"]);
+        assert!(items[0].stepper.is_none());
     }
 
     #[test]
@@ -362,6 +430,26 @@ mod tests {
             ..Settings::default()
         };
         assert_eq!(duplicates.validate().unwrap().favorites, [5, 10]);
+        let odd_step = Settings {
+            step_seconds: 45,
+            ..Settings::default()
+        };
+        assert!(odd_step.validate().is_err());
+    }
+
+    #[test]
+    fn typed_durations_are_minutes_or_clock_times() {
+        let secs = |t: &str| parse_duration(t).map(|d| d.as_secs());
+        assert_eq!(secs("5"), Some(300));
+        assert_eq!(secs(" 90 "), Some(5400));
+        assert_eq!(secs("1:30"), Some(90));
+        assert_eq!(secs("1:02:03"), Some(3723));
+        assert_eq!(secs("0"), Some(0));
+        assert_eq!(secs("1:75"), None);
+        assert_eq!(secs("abc"), None);
+        assert_eq!(secs(""), None);
+        assert_eq!(secs("601"), None);
+        assert_eq!(secs("10:00:00"), Some(36000));
     }
 
     #[test]
@@ -370,17 +458,24 @@ mod tests {
         let settings = Settings {
             default_minutes: 0,
             favorites: Vec::new(),
+            step_seconds: 30,
         };
         let mut countdown = Countdown::new(settings.default_duration());
         let at_zero = &items(&countdown, &settings, t0)[0];
         assert_eq!(at_zero.label, "00:00");
-        assert_eq!(ids(at_zero), ["add:1", "add:5"]);
+        assert!(at_zero.actions.is_empty());
+        let stepper = at_zero.stepper.as_ref().unwrap();
+        assert!(stepper.decrease.is_none());
+        assert_eq!(stepper.increase.as_ref().unwrap().label, "Add 30 s");
         assert!(at_zero.quiet);
         countdown.add(minutes(1), t0);
         let one_minute = &items(&countdown, &settings, t0)[0];
-        assert_eq!(ids(one_minute), ["add:1", "add:5", "start", "reset"]);
+        assert_eq!(ids(one_minute), ["start"]);
         assert!(one_minute.quiet);
         countdown.start(t0);
-        assert!(!items(&countdown, &settings, t0)[0].quiet);
+        let running = &items(&countdown, &settings, t0)[0];
+        assert!(!running.quiet);
+        assert_eq!(ids(running), ["pause", "reset"]);
+        assert!(running.stepper.is_none());
     }
 }
