@@ -198,10 +198,21 @@ html[data-window='notch'] {
     background: var(--notch-button);
   }
 
-  /* A faded item (a paused track); its buttons stay clear. */
-  & .dimmed:not(li),
-  & li.dimmed > :not(.actions) {
+  /* A faded item (a paused track) in the compact views. In an open list it
+     is there to be read: only its picture fades a little (DF-0033). */
+  & .dimmed:not(li) {
     opacity: 0.5;
+  }
+
+  & li.dimmed .cover {
+    opacity: 0.7;
+  }
+
+  /* Fading in or out gently, e.g. a playing track settling (DF-0033). */
+  & .label,
+  & .cover,
+  & .progress {
+    transition: opacity calc(var(--duration, 250ms) * 3) ease;
   }
 
   /* Grain (DF-0019): a fixed noise painted over the shape, specks of the text

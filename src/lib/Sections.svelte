@@ -410,9 +410,9 @@
     border-radius: 8px;
   }
 
-  /* Paused: the picture and texts fade, the buttons stay clear. */
-  .featured.dimmed > :global(.cover),
-  .featured.dimmed .stack > :not(.actions) {
-    opacity: 0.5;
+  /* Paused: only the picture fades a little. Opened, the item is there to
+     be read and used: its texts stay clear (DF-0033). */
+  .featured.dimmed > :global(.cover) {
+    opacity: 0.7;
   }
 </style>

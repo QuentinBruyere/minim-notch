@@ -72,6 +72,8 @@ export interface Item {
   // Compact views: its slider as a level, icon, bar and number (the volume),
   // or its compact text instead (muted).
   meter: boolean
+  // The closed notch draws its slider as a line along its outline (DF-0033).
+  outline: boolean
   actions: Action[]
   // A slider in the open notch, between the title and the label.
   slider: Slider | null
@@ -79,6 +81,8 @@ export interface Item {
   // Nothing worth showing: compact views show the image, else the module's
   // icon; a spotlight shows the label for a moment.
   quiet: boolean
+  // In a pin, instead of `quiet`; null: as `quiet`.
+  pinQuiet: boolean | null
   // Replaces the module's icon in the compact views (the volume's level).
   icon: Icon | null
   // Makes the item's icon a button (the volume's mute), wherever it shows.

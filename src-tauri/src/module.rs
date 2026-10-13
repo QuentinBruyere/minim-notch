@@ -134,6 +134,9 @@ pub struct Item {
     /// or the item's `image` if it has one. A spotlight (`Host::spotlight`)
     /// shows the label for a moment.
     pub quiet: bool,
+    /// In a pin, instead of `quiet` (Media hides its text in the closed
+    /// notch and in a pin separately). `None`: as `quiet`.
+    pub pin_quiet: Option<bool>,
     /// Replaces the module's icon in the compact views (e.g. the volume's
     /// level).
     pub icon: Option<Icon>,
@@ -167,6 +170,9 @@ pub struct Item {
     /// The compact views show its slider as a level: its icon, a bar and the
     /// number (the volume, DF-0027), or its compact text instead (muted).
     pub meter: bool,
+    /// The closed notch draws its slider as a thin line along its outline
+    /// (a track's progress, DF-0033).
+    pub outline: bool,
     /// In the compact views, a text too long for its place scrolls instead
     /// of being cut (DF-0017).
     pub scroll: bool,
