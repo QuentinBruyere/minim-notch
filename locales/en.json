@@ -166,6 +166,7 @@
   "settings.companions.filter": "Companion pack",
   "settings.companions.hint": "Your own companions, to pick with a right click on a Claude Code session or in the Companion module. Start from the template to draw yours.",
   "settings.companions.import_failed": "Cannot add this companion",
+  "settings.companions.intro": "Companions are available in the {companion} and {claude} modules.",
   "settings.companions.open_failed": "Cannot open the companions folder",
   "settings.companions.open_folder": "Open the folder",
   "settings.companions.preview": "{name}'s animations",

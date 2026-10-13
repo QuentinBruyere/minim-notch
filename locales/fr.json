@@ -166,6 +166,7 @@
   "settings.companions.filter": "Pack de compagnon",
   "settings.companions.hint": "Vos propres compagnons, à choisir au clic droit d'une session Claude Code ou dans le module Compagnon. Partez du modèle pour dessiner le vôtre.",
   "settings.companions.import_failed": "Impossible d'ajouter ce compagnon",
+  "settings.companions.intro": "Les compagnons sont disponibles dans les modules {companion} et {claude}.",
   "settings.companions.open_failed": "Impossible d'ouvrir le dossier des compagnons",
   "settings.companions.open_folder": "Ouvrir le dossier",
   "settings.companions.preview": "Animations de {name}",

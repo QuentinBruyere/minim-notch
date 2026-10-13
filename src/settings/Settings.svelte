@@ -195,6 +195,29 @@
     error = null
   }
 
+  // A module's own page, from another category (the Companions intro).
+  function openModulePage(id: string) {
+    show('modules')
+    openModuleId = id
+  }
+
+  // The Companions intro: the modules that show companions, each a link to
+  // its page, named as in the Modules category.
+  const companionsIntro = $derived.by(() => {
+    const links: Record<string, string> = { companion: 'companion', claude: 'claude-code' }
+    const nameOf = (id: string) => settings?.modules.find((m) => m.id === id)?.name ?? id
+    const text = t('settings.companions.intro', { companion: '{companion}', claude: '{claude}' })
+    return text
+      .split(/(\{companion\}|\{claude\})/)
+      .filter((part) => part !== '')
+      .map((part) => {
+        const module = links[part.slice(1, -1)]
+        return part.startsWith('{') && module
+          ? { text: nameOf(module), module }
+          : { text: part, module: null }
+      })
+  })
+
   function setModuleEnabled(module: ModuleInfo, enabled: boolean) {
     void run('set_module_enabled', { id: module.id, enabled })
   }
@@ -918,6 +941,15 @@
         </section>
       {:else if page === 'companions'}
         <h1>{t('settings.page.companions')}</h1>
+        <p class="intro">
+          {#each companionsIntro as part, i (i)}
+            {#if part.module}
+              <button class="link" onclick={() => openModulePage(part.module!)}>{part.text}</button>
+            {:else}
+              {part.text}
+            {/if}
+          {/each}
+        </p>
         <CustomCompanions />
       {:else if page === 'modules' && openModule}
         {@const ModuleSettings = moduleUis[openModule.id]?.settings}
